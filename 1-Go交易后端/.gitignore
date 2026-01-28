@@ -1,0 +1,43 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary
+*.test
+
+# Output
+*.out
+/bin/
+/dist/
+
+# Dependency directories
+/vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Environment
+.env
+.env.local
+
+# Config (local)
+config/config.local.yaml
+
+# Temporary files
+tmp/
+temp/
