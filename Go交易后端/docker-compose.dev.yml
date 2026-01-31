@@ -1,0 +1,83 @@
+# Docker Compose开发配置 - 支持热重载
+version: '3.8'
+
+services:
+  # MySQL数据库
+  mysql:
+    image: mysql:8.0
+    container_name: exchange-mysql-dev
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root123456
+      MYSQL_DATABASE: bibi2022
+      MYSQL_CHARACTER_SET_SERVER: utf8mb4
+      MYSQL_COLLATION_SERVER: utf8mb4_unicode_ci
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - exchange-network
+
+  # Redis缓存
+  redis:
+    image: redis:7.0-alpine
+    container_name: exchange-redis-dev
+    restart: always
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - exchange-network
+
+  # Go后端API（开发模式 - 热重载）
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: exchange-api-dev
+    restart: unless-stopped
+    ports:
+      - "8080:8080"   # API端口
+      - "8081:8081"   # WebSocket端口
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # 使用容器内的服务名作为地址
+      - DB_HOST=mysql
+      - REDIS_HOST=redis
+      - GIN_MODE=debug
+    volumes:
+      # 挂载代码目录（实现热重载）
+      - .:/app
+      # 排除vendor和tmp（避免权限问题）
+      - /app/vendor
+      - /app/tmp
+      # 挂载Go模块缓存（加速编译）
+      - go-modules:/go/pkg/mod
+    networks:
+      - exchange-network
+
+volumes:
+  mysql-data:
+  redis-data:
+  go-modules:
+
+networks:
+  exchange-network:
+    driver: bridge

@@ -1,0 +1,194 @@
+[mysqld]
+# ============================================================
+# MySQL 5.7 优化配置 - 交易所系统专用
+# ============================================================
+# 版本: MySQL 5.7.x
+# 适用系统: Linux/Windows
+# 内存配置: 16GB RAM
+# ============================================================
+
+# ------------------------------------------------------------
+# 基本配置
+# ------------------------------------------------------------
+server-id = 1
+port = 3306
+basedir = /usr/local/mysql
+datadir = /var/lib/mysql/data
+tmpdir = /tmp
+socket = /var/lib/mysql/mysql.sock
+pid-file = /var/lib/mysql/mysql.pid
+
+# 字符集配置
+character-set-server = utf8mb4
+collation-server = utf8mb4_unicode_ci
+init_connect = 'SET NAMES utf8mb4'
+
+# 忽略表名大小写（Windows/Linux混合部署时建议开启）
+lower_case_table_names = 1
+
+# ------------------------------------------------------------
+# 存储引擎配置
+# ------------------------------------------------------------
+default-storage-engine = InnoDB
+default_tmp_storage_engine = InnoDB
+
+# 禁用MyISAM（交易所系统推荐全InnoDB）
+skip-federated
+skip-blackhole
+
+# ------------------------------------------------------------
+# InnoDB 缓冲池配置（核心优化）
+# ------------------------------------------------------------
+# 缓冲池大小 - 建议设置为物理内存的70-80%
+innodb_buffer_pool_size = 12G
+
+# 缓冲池实例数量（MySQL 5.7.5+支持，5.7需手动设置）
+# 注意：5.7中innodb_buffer_pool_instances在缓冲池>=1G时自动启用
+# 手动设置可更好控制，默认情况下5.7会自动分割
+# innodb_buffer_pool_instances = 4
+
+# 日志文件配置
+innodb_log_file_size = 1G
+innodb_log_buffer_size = 64M
+innodb_log_files_in_group = 2
+
+# 刷新策略（性能与安全平衡）
+innodb_flush_log_at_trx_commit = 2
+innodb_flush_method = O_DIRECT
+innodb_doublewrite = 1
+
+# 并发与锁配置
+innodb_thread_concurrency = 0
+innodb_lock_wait_timeout = 50
+innodb_deadlock_detect = 1
+innodb_print_all_deadlocks = 1
+
+# 表空间配置
+innodb_file_per_table = 1
+innodb_file_format = Barracuda
+innodb_large_prefix = 1
+
+# 缓冲池刷新配置
+innodb_old_blocks_pct = 37
+innodb_old_blocks_time = 1000
+innodb_io_capacity = 2000
+innodb_io_capacity_max = 4000
+innodb_read_io_threads = 8
+innodb_write_io_threads = 8
+innodb_purge_threads = 4
+
+# ------------------------------------------------------------
+# 连接配置
+# ------------------------------------------------------------
+max_connections = 500
+max_connect_errors = 100000
+wait_timeout = 600
+interactive_timeout = 600
+
+# 线程缓存
+thread_cache_size = 64
+
+# 表缓存
+table_open_cache = 4000
+table_definition_cache = 2000
+
+# 网络配置
+max_allowed_packet = 256M
+net_buffer_length = 16384
+skip-name-resolve = 1
+
+# ------------------------------------------------------------
+# 临时表与内存表配置
+# ------------------------------------------------------------
+tmp_table_size = 256M
+max_heap_table_size = 256M
+
+# ------------------------------------------------------------
+# 查询缓存（MySQL 5.7已弃用，建议关闭）
+# ------------------------------------------------------------
+query_cache_type = 0
+query_cache_size = 0
+
+# ------------------------------------------------------------
+# 排序与分组配置
+# ------------------------------------------------------------
+sort_buffer_size = 4M
+join_buffer_size = 4M
+read_buffer_size = 2M
+read_rnd_buffer_size = 8M
+
+# ------------------------------------------------------------
+# 慢查询日志配置
+# ------------------------------------------------------------
+slow_query_log = 1
+slow_query_log_file = /var/log/mysql/slow.log
+long_query_time = 1
+log_queries_not_using_indexes = 1
+log_throttle_queries_not_using_indexes = 10
+
+# ------------------------------------------------------------
+# 错误日志配置
+# ------------------------------------------------------------
+log_error = /var/log/mysql/error.log
+log_error_verbosity = 3
+
+# ------------------------------------------------------------
+# 二进制日志配置（主从复制用）
+# ------------------------------------------------------------
+log-bin = mysql-bin
+binlog_format = ROW
+binlog_row_image = FULL
+max_binlog_size = 1G
+binlog_cache_size = 64M
+expire_logs_days = 7
+sync_binlog = 1
+
+# GTID配置（主从复制）
+gtid_mode = ON
+enforce_gtid_consistency = 1
+
+# ------------------------------------------------------------
+# 性能Schema配置（MySQL 5.7性能监控）
+# ------------------------------------------------------------
+performance_schema = ON
+performance_schema_instrument = '%=ON'
+performance_schema_consumer_events_statements_history_long_size = 10000
+
+# ------------------------------------------------------------
+# 安全管理配置
+# ------------------------------------------------------------
+local_infile = 0
+symbolic-links = 0
+
+# SQL模式
+sql_mode = 'NO_ENGINE_SUBSTITUTION,STRICT_TRANS_TABLES'
+
+# ------------------------------------------------------------
+# 内存限制配置（防止OOM）
+# ------------------------------------------------------------
+# 计算公式：innodb_buffer_pool + key_buffer_size + max_connections * (read_buffer + sort_buffer + tmp_table)
+# 估算：12G + 256M + 500 * (4M + 4M + 256M) ≈ 16.5G
+# 建议物理内存至少16GB
+
+# ------------------------------------------------------------
+# Windows特定配置
+# ------------------------------------------------------------
+[client]
+port = 3306
+socket = /var/lib/mysql/mysql.sock
+
+[mysql]
+socket = /var/lib/mysql/mysql.sock
+default-character-set = utf8mb4
+
+# ------------------------------------------------------------
+# Windows服务配置
+# ------------------------------------------------------------
+[mysqld]
+# Windows下使用以下路径配置
+# basedir = "C:/Program Files/MySQL/MySQL Server 5.7"
+# datadir = "C:/Program Files/MySQL/MySQL Server 5.7/Data"
+# tmpdir = "C:/ProgramData/MySQL/Data"
+# log_error = "C:/ProgramData/MySQL/Data/error.log"
+# slow_query_log_file = "C:/ProgramData/MySQL/Data/slow.log"
+# socket = "MySQL"
