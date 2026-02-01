@@ -647,3 +647,252 @@ func (s *UserAssetsService) GetAssetOverviewFromUserAssets(userID uint) (*AssetO
 
 	return response, nil
 }
+
+// ============================================================
+// 交割合约账户专用方法
+// ============================================================
+
+// GetDeliveryAssets 获取交割合约账户资产
+func (s *UserAssetsService) GetDeliveryAssets(userID uint) (*model.UserAssets, error) {
+	return s.GetUserAssetsByType(userID, model.WalletTypeDelivery)
+}
+
+// CreateDeliveryAssets 创建交割合约账户资产记录
+func (s *UserAssetsService) CreateDeliveryAssets(userID uint) (*model.UserAssets, error) {
+	return s.CreateUserAssetsByType(userID, model.WalletTypeDelivery)
+}
+
+// GetOrCreateDeliveryAssets 获取或创建交割合约账户资产
+func (s *UserAssetsService) GetOrCreateDeliveryAssets(userID uint) (*model.UserAssets, error) {
+	assets, err := s.GetDeliveryAssets(userID)
+	if err != nil && err != gorm.ErrRecordNotFound {
+		return nil, err
+	}
+	
+	if assets == nil {
+		return s.CreateDeliveryAssets(userID)
+	}
+	
+	return assets, nil
+}
+
+// UpdateDeliveryMargin 更新交割合约保证金
+func (s *UserAssetsService) UpdateDeliveryMargin(userID uint, amount float64, isAdd bool) error {
+	return database.DB.Transaction(func(tx *gorm.DB) error {
+		var assets model.UserAssets
+		err := tx.Where("user_id = ? AND wallet_type = ?", userID, model.WalletTypeDelivery).First(&assets).Error
+		if err != nil {
+			if err == gorm.ErrRecordNotFound {
+				// 创建新的交割合约资产记录
+				newAssets := &model.UserAssets{
+					UserID:           userID,
+					WalletType:       model.WalletTypeDelivery,
+					UsdtBalance:      0,
+					UsdtLocked:       0,
+					CurrencyBalances: make(model.CurrencyBalance),
+					CurrencyLocked:   make(model.CurrencyBalance),
+					DeliveryMargin:   0,
+					DeliveryPnL:      0,
+					CreateTime:       time.Now().Unix(),
+					UpdateTime:       time.Now().Unix(),
+				}
+				
+				if isAdd {
+					newAssets.DeliveryMargin = amount
+				} else {
+					return errors.New("margin amount cannot be negative")
+				}
+				
+				return tx.Create(newAssets).Error
+			}
+			return err
+		}
+		
+		// 更新保证金
+		if isAdd {
+			assets.DeliveryMargin += amount
+		} else {
+			assets.DeliveryMargin -= amount
+			if assets.DeliveryMargin < 0 {
+				return errors.New("insufficient delivery margin")
+			}
+		}
+		
+		assets.UpdateTime = time.Now().Unix()
+		
+		// 使用乐观锁
+		result := tx.Model(&model.UserAssets{}).
+			Where("user_id = ? AND wallet_type = ? AND version = ?", 
+				userID, model.WalletTypeDelivery, assets.Version).
+			Updates(map[string]interface{}{
+				"delivery_margin": assets.DeliveryMargin,
+				"update_time":    assets.UpdateTime,
+				"version":        gorm.Expr("version + 1"),
+			})
+		
+		if result.Error != nil {
+			return result.Error
+		}
+		
+		if result.RowsAffected == 0 {
+			return errors.New("update failed due to version conflict")
+		}
+		
+		return nil
+	})
+}
+
+// UpdateDeliveryPnL 更新交割合约盈亏
+func (s *UserAssetsService) UpdateDeliveryPnL(userID uint, pnl float64) error {
+	return database.DB.Transaction(func(tx *gorm.DB) error {
+		var assets model.UserAssets
+		err := tx.Where("user_id = ? AND wallet_type = ?", userID, model.WalletTypeDelivery).First(&assets).Error
+		if err != nil {
+			if err == gorm.ErrRecordNotFound {
+				return errors.New("delivery account not found")
+			}
+			return err
+		}
+		
+		// 更新盈亏和余额
+		assets.DeliveryPnL += pnl
+		assets.UsdtBalance += pnl // 盈亏直接影响USDT余额
+		assets.UpdateTime = time.Now().Unix()
+		
+		// 使用乐观锁
+		result := tx.Model(&model.UserAssets{}).
+			Where("user_id = ? AND wallet_type = ? AND version = ?", 
+				userID, model.WalletTypeDelivery, assets.Version).
+			Updates(map[string]interface{}{
+				"delivery_pnl":    assets.DeliveryPnL,
+				"usdt_balance":    assets.UsdtBalance,
+				"update_time":     assets.UpdateTime,
+				"version":         gorm.Expr("version + 1"),
+			})
+		
+		if result.Error != nil {
+			return result.Error
+		}
+		
+		if result.RowsAffected == 0 {
+			return errors.New("update failed due to version conflict")
+		}
+		
+		return nil
+	})
+}
+
+// FreezeDeliveryMargin 冻结交割合约保证金
+func (s *UserAssetsService) FreezeDeliveryMargin(userID uint, amount float64) error {
+	return database.DB.Transaction(func(tx *gorm.DB) error {
+		var assets model.UserAssets
+		err := tx.Where("user_id = ? AND wallet_type = ?", userID, model.WalletTypeDelivery).First(&assets).Error
+		if err != nil {
+			return err
+		}
+		
+		// 计算可用保证金
+		availableMargin := assets.UsdtBalance - assets.UsdtLocked
+		if availableMargin < amount {
+			return fmt.Errorf("insufficient delivery margin: available %.8f, need %.8f", 
+				availableMargin, amount)
+		}
+		
+		// 冻结保证金
+		assets.UsdtLocked += amount
+		assets.UpdateTime = time.Now().Unix()
+		
+		// 使用乐观锁
+		result := tx.Model(&model.UserAssets{}).
+			Where("user_id = ? AND wallet_type = ? AND version = ?", 
+				userID, model.WalletTypeDelivery, assets.Version).
+			Updates(map[string]interface{}{
+				"usdt_locked": assets.UsdtLocked,
+				"update_time":  assets.UpdateTime,
+				"version":      gorm.Expr("version + 1"),
+			})
+		
+		if result.Error != nil {
+			return result.Error
+		}
+		
+		if result.RowsAffected == 0 {
+			return errors.New("update failed due to version conflict")
+		}
+		
+		return nil
+	})
+}
+
+// UnfreezeDeliveryMargin 解冻交割合约保证金
+func (s *UserAssetsService) UnfreezeDeliveryMargin(userID uint, amount float64) error {
+	return database.DB.Transaction(func(tx *gorm.DB) error {
+		var assets model.UserAssets
+		err := tx.Where("user_id = ? AND wallet_type = ?", userID, model.WalletTypeDelivery).First(&assets).Error
+		if err != nil {
+			return err
+		}
+		
+		// 检查冻结的保证金
+		if assets.UsdtLocked < amount {
+			return fmt.Errorf("insufficient frozen margin: frozen %.8f, unfreeze %.8f", 
+				assets.UsdtLocked, amount)
+		}
+		
+		// 解冻保证金
+		assets.UsdtLocked -= amount
+		assets.UpdateTime = time.Now().Unix()
+		
+		// 使用乐观锁
+		result := tx.Model(&model.UserAssets{}).
+			Where("user_id = ? AND wallet_type = ? AND version = ?", 
+				userID, model.WalletTypeDelivery, assets.Version).
+			Updates(map[string]interface{}{
+				"usdt_locked": assets.UsdtLocked,
+				"update_time":  assets.UpdateTime,
+				"version":      gorm.Expr("version + 1"),
+			})
+		
+		if result.Error != nil {
+			return result.Error
+		}
+		
+		if result.RowsAffected == 0 {
+			return errors.New("update failed due to version conflict")
+		}
+		
+		return nil
+	})
+}
+
+// GetDeliveryAccountSummary 获取交割合约账户汇总信息
+func (s *UserAssetsService) GetDeliveryAccountSummary(userID uint) (*DeliveryAccountSummary, error) {
+	assets, err := s.GetOrCreateDeliveryAssets(userID)
+	if err != nil {
+		return nil, err
+	}
+	
+	// 计算可用保证金
+	availableMargin := assets.UsdtBalance - assets.UsdtLocked
+
+	return &DeliveryAccountSummary{
+		UsdtBalance:      assets.UsdtBalance,
+		UsdtLocked:       assets.UsdtLocked,
+		DeliveryMargin:   assets.DeliveryMargin,
+		AvailableMargin:  availableMargin,
+		DeliveryPnL:      assets.DeliveryPnL,
+		TotalValueUsdt:   assets.TotalValueUsdt,
+		UpdateTime:       assets.UpdateTime,
+	}, nil
+}
+
+// DeliveryAccountSummary 交割合约账户汇总信息
+type DeliveryAccountSummary struct {
+	UsdtBalance     float64 `json:"usdt_balance"`      // USDT余额
+	UsdtLocked      float64 `json:"usdt_locked"`       // 冻结余额
+	DeliveryMargin  float64 `json:"delivery_margin"`   // 交割合约保证金
+	AvailableMargin float64 `json:"available_margin"`  // 可用保证金
+	DeliveryPnL     float64 `json:"delivery_pnl"`      // 交割合约盈亏
+	TotalValueUsdt  float64 `json:"total_value_usdt"`  // 总价值
+	UpdateTime      int64   `json:"update_time"`       // 更新时间
+}

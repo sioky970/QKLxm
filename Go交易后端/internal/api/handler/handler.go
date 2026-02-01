@@ -15,6 +15,7 @@ var walletService = service.NewWalletService()
 var spotTradingService = service.NewSpotTradingService()
 var futuresTradingService = service.NewFuturesTradingService()
 var microTradingService = service.NewMicroTradingService()
+var deliveryTradingService = service.GetDeliveryTradingService()
 var newsService = service.NewNewsService()
 var messageService = service.NewMessageService()
 var currencyService = service.NewCurrencyService()
@@ -714,6 +715,165 @@ func LeverSubmit(c *gin.Context) {
 	}
 
 	response.Success(c, "下单成功", result)
+}
+
+// ============================================================
+// 交割合约交易接口
+// ============================================================
+
+// DeliveryOpen 交割合约开仓
+// @Summary 交割合约开仓
+// @Description 提交交割合约交易订单，开仓操作
+// @Tags 交割合约
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body service.OpenDeliveryPositionRequest true "开仓参数"
+// @Success 200 {object} response.Response{data=object} "开仓成功"
+// @Failure 401 {object} response.Response "未登录"
+// @Router /delivery/contract/open [post]
+func DeliveryOpen(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	if userID == 0 {
+		response.Unauthorized(c, "请先登录")
+		return
+	}
+
+	var req service.OpenDeliveryPositionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "参数错误: "+err.Error())
+		return
+	}
+
+	result, err := deliveryTradingService.OpenPosition(userID, &req)
+	if err != nil {
+		response.Error(c, err.Error())
+		return
+	}
+
+	response.Success(c, "开仓成功", result)
+}
+
+// DeliveryClose 交割合约平仓
+// @Summary 交割合约平仓
+// @Description 提交交割合约交易订单，平仓操作
+// @Tags 交割合约
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body service.CloseDeliveryPositionRequest true "平仓参数"
+// @Success 200 {object} response.Response{data=object} "平仓成功"
+// @Failure 401 {object} response.Response "未登录"
+// @Router /delivery/contract/close [post]
+func DeliveryClose(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	if userID == 0 {
+		response.Unauthorized(c, "请先登录")
+		return
+	}
+
+	var req service.CloseDeliveryPositionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "参数错误: "+err.Error())
+		return
+	}
+
+	result, err := deliveryTradingService.ClosePosition(userID, &req)
+	if err != nil {
+		response.Error(c, err.Error())
+		return
+	}
+
+	response.Success(c, "平仓成功", result)
+}
+
+// DeliveryPositions 交割合约持仓列表
+// @Summary 交割合约持仓列表
+// @Description 获取用户交割合约持仓列表
+// @Tags 交割合约
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body service.DeliveryPositionListRequest true "查询参数"
+// @Success 200 {object} response.Response{data=object} "获取成功"
+// @Failure 401 {object} response.Response "未登录"
+// @Router /delivery/contract/positions [post]
+func DeliveryPositions(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	if userID == 0 {
+		response.Unauthorized(c, "请先登录")
+		return
+	}
+
+	var req service.DeliveryPositionListRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "参数错误: "+err.Error())
+		return
+	}
+
+	// 设置默认分页参数
+	if req.Page <= 0 {
+		req.Page = 1
+	}
+	if req.PageSize <= 0 {
+		req.PageSize = 10
+	}
+
+	positions, err := deliveryTradingService.GetPositions(userID, &req)
+	if err != nil {
+		response.Error(c, err.Error())
+		return
+	}
+
+	response.Success(c, "获取成功", gin.H{
+		"positions": positions,
+		"page":      req.Page,
+		"page_size": req.PageSize,
+	})
+}
+
+// DeliveryAccount 交割合约账户余额
+// @Summary 交割合约账户余额
+// @Description 获取用户交割合约账户余额和保证金信息
+// @Tags 交割合约
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} response.Response{data=object} "获取成功"
+// @Failure 401 {object} response.Response "未登录"
+// @Router /delivery/account/balance [get]
+func DeliveryAccount(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	if userID == 0 {
+		response.Unauthorized(c, "请先登录")
+		return
+	}
+
+	balance, err := deliveryTradingService.GetAccountBalance(userID)
+	if err != nil {
+		response.Error(c, err.Error())
+		return
+	}
+
+	response.Success(c, "获取成功", balance)
+}
+
+// DeliveryContracts 交割合约列表
+// @Summary 交割合约列表
+// @Description 获取所有可用的交割合约列表
+// @Tags 交割合约
+// @Accept json
+// @Produce json
+// @Success 200 {object} response.Response{data=object} "获取成功"
+// @Router /delivery/contracts [get]
+func DeliveryContracts(c *gin.Context) {
+	contracts, err := deliveryTradingService.GetContracts()
+	if err != nil {
+		response.Error(c, err.Error())
+		return
+	}
+
+	response.Success(c, "获取成功", contracts)
 }
 
 // LeverClose 合约平仓(兼容旧API)

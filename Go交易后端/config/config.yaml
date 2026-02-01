@@ -11,9 +11,9 @@ app:
 database:
   host: "127.0.0.1"
   port: 3306
-  user: "root"
-  password: "root123456"
-  dbname: "bibi2022"
+  user: "jy"
+  password: "CPBM5C2LKLjbszcj"
+  dbname: "jy"
   charset: "utf8"  # 使用 utf8 避免 MySQL 5.6 索引长度限制
   max_idle_conns: 10
   max_open_conns: 100

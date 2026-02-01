@@ -127,10 +127,15 @@ type TradeHistoryResponse struct {
 
 // SubmitOrder 提交订单
 func (s *SpotTradingService) SubmitOrder(userID uint, req *SpotSubmitOrderRequest) (*SpotSubmitOrderResponse, error) {
-	// 验证交易对是否有效
-	_, err := GetCurrencyService().GetTradePairByCurrency(req.CurrencyID, req.LegalID)
+	// 验证币种是否存在和启用（取消交易对验证）
+	_, err := GetCurrencyService().GetCurrencyByID(req.CurrencyID)
 	if err != nil {
-		return nil, fmt.Errorf("无效的交易对: %w", err)
+		return nil, fmt.Errorf("币种不存在: %w", err)
+	}
+	
+	_, err = GetCurrencyService().GetCurrencyByID(req.LegalID)
+	if err != nil {
+		return nil, fmt.Errorf("计价币种不存在: %w", err)
 	}
 
 	// 从 UserAssets 新表读取余额进行校验（保持与前端显示一致）

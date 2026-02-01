@@ -70,9 +70,15 @@ func (s *WalletTransferService) GetUserAllWallets(userID uint64) (*WalletBalance
 		return nil, err
 	}
 
+	deliveryAssets, err := s.GetUserWalletBalance(userID, model.WalletTypeDelivery)
+	if err != nil {
+		return nil, err
+	}
+
 	spotBalance := decimal.NewFromFloat(spotAssets.UsdtBalance)
 	contractBalance := decimal.NewFromFloat(contractAssets.UsdtBalance)
-	totalBalance := spotBalance.Add(contractBalance)
+	deliveryBalance := decimal.NewFromFloat(deliveryAssets.UsdtBalance)
+	totalBalance := spotBalance.Add(contractBalance).Add(deliveryBalance)
 
 	return &WalletBalanceResponse{
 		SpotBalance:     spotBalance,
@@ -109,12 +115,16 @@ func (s *WalletTransferService) Transfer(userID uint64, fromWallet, toWallet mod
 		fromWalletName = "现货账户"
 	case model.WalletTypeContract:
 		fromWalletName = "合约账户"
+	case model.WalletTypeDelivery:
+		fromWalletName = "交割账户"
 	}
 	switch toWallet {
 	case model.WalletTypeSpot:
 		toWalletName = "现货账户"
 	case model.WalletTypeContract:
 		toWalletName = "合约账户"
+	case model.WalletTypeDelivery:
+		toWalletName = "交割账户"
 	}
 
 	record := &model.WalletTransferRecord{

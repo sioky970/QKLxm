@@ -1563,6 +1563,10 @@ type UserAssets struct {
 	CurrencyBalances CurrencyBalance `gorm:"column:currency_balances;type:text" json:"currency_balances"`
 	CurrencyLocked   CurrencyBalance `gorm:"column:currency_locked;type:text" json:"currency_locked"`
 
+	// 交割合约专用字段
+	DeliveryMargin   float64 `gorm:"column:delivery_margin;type:decimal(20,8);default:0" json:"delivery_margin"`   // 交割合约保证金
+	DeliveryPnL      float64 `gorm:"column:delivery_pnl;type:decimal(20,8);default:0" json:"delivery_pnl"`       // 交割合约盈亏
+
 	// 统计字段
 	TotalValueUsdt float64 `gorm:"column:total_value_usdt;type:decimal(20,8);not null;default:0;index" json:"total_value_usdt"`
 	LastTradeTime  int64   `gorm:"column:last_trade_time;not null;default:0;index" json:"last_trade_time"`
@@ -1974,8 +1978,9 @@ const (
 type WalletType string
 
 const (
-	WalletTypeSpot     WalletType = "spot"     // 现货钱包
-	WalletTypeContract WalletType = "contract" // 合约钱包
+	WalletTypeSpot      WalletType = "spot"      // 现货钱包
+	WalletTypeContract WalletType = "contract"  // 永续合约钱包
+	WalletTypeDelivery WalletType = "delivery"  // 交割合约钱包
 )
 
 // UserWallet 用户钱包资产表
@@ -1995,6 +2000,61 @@ type UserWallet struct {
 
 func (UserWallet) TableName() string {
 	return "user_wallets"
+}
+
+// DeliveryContract 交割合约配置表
+type DeliveryContract struct {
+	ID          uint    `gorm:"primaryKey;column:id" json:"id"`
+	Symbol      string  `gorm:"column:symbol;uniqueIndex" json:"symbol"`           // 合约代码
+	BaseAsset   string  `gorm:"column:base_asset" json:"base_asset"`             // 基础资产
+	QuoteAsset  string  `gorm:"column:quote_asset" json:"quote_asset"`           // 计价资产
+	ContractSize float64 `gorm:"column:contract_size" json:"contract_size"`       // 合约乘数
+	MinPrice    float64 `gorm:"column:min_price" json:"min_price"`               // 最小价格变动单位
+	MaxLeverage int     `gorm:"column:max_leverage" json:"max_leverage"`         // 最大杠杆倍数
+	Status      int8    `gorm:"column:status" json:"status"`                    // 1=启用,0=禁用
+	
+	// 交割相关
+	DeliveryDate time.Time `gorm:"column:delivery_date" json:"delivery_date"`     // 交割日期
+	SettleType  int8     `gorm:"column:settle_type" json:"settle_type"`       // 交割方式: 1=现金, 2=实物
+	
+	CreateTime time.Time `gorm:"column:create_time" json:"create_time"`
+	UpdateTime time.Time `gorm:"column:update_time" json:"update_time"`
+}
+
+func (DeliveryContract) TableName() string {
+	return "delivery_contracts"
+}
+
+// DeliveryPosition 交割合约持仓表
+type DeliveryPosition struct {
+	ID           uint    `gorm:"primaryKey;column:id" json:"id"`
+	UserID       uint    `gorm:"column:user_id;index" json:"user_id"`
+	ContractID   uint    `gorm:"column:contract_id;index" json:"contract_id"`
+	Symbol       string  `gorm:"column:symbol" json:"symbol"`
+	Side         int8    `gorm:"column:side" json:"side"`                       // 1=做多,2=做空
+	Size         float64 `gorm:"column:size" json:"size"`                       // 持仓数量
+	EntryPrice   float64 `gorm:"column:entry_price" json:"entry_price"`         // 开仓价格
+	Leverage     int     `gorm:"column:leverage" json:"leverage"`              // 杠杆倍数
+	Margin       float64 `gorm:"column:margin" json:"margin"`                   // 保证金
+	
+	// 当前价格和盈亏
+	CurrentPrice float64 `gorm:"column:current_price" json:"current_price"`    // 当前标记价格
+	UnrealizedPnL float64 `gorm:"column:unrealized_pnl" json:"unrealized_pnl"` // 未实现盈亏
+	
+	// 止盈止损
+	TakeProfitPrice *float64 `gorm:"column:take_profit_price" json:"take_profit_price"`
+	StopLossPrice   *float64 `gorm:"column:stop_loss_price" json:"stop_loss_price"`
+	
+	// 状态管理
+	Status         int8     `gorm:"column:status" json:"status"`               // 1=持仓,0=已平仓
+	DeliveryStatus int8     `gorm:"column:delivery_status" json:"delivery_status"` // 交割状态
+	
+	CreateTime time.Time `gorm:"column:created_at" json:"created_at"`
+	UpdateTime time.Time `gorm:"column:updated_at" json:"updated_at"`
+}
+
+func (DeliveryPosition) TableName() string {
+	return "delivery_positions"
 }
 
 // GetTotalBalance 获取总余额

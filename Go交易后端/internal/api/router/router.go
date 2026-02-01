@@ -127,6 +127,13 @@ func Setup() *gin.Engine {
 			auth.GET("/contract/pending", handler.ContractGetPendingOrders)                // 挂单列表
 			auth.GET("/contract/position/:position_id", handler.ContractGetPositionDetail) // 持仓详情
 
+			// 交割合约交易模块
+			auth.POST("/delivery/contract/open", handler.DeliveryOpen)           // 开仓(市价/限价)
+			auth.POST("/delivery/contract/close", handler.DeliveryClose)         // 平仓
+			auth.GET("/delivery/contract/positions", handler.DeliveryPositions)  // 持仓列表
+			auth.GET("/delivery/account/balance", handler.DeliveryAccount)        // 账户余额
+			r.GET("/delivery/contracts", handler.DeliveryContracts)               // 合约列表(无需登录)
+
 			// 秒合约模块
 			auth.GET("/micro/periods", handler.MicroPeriods)       // 获取周期配置(无需登录也可访问)
 			auth.POST("/micro/submit", handler.MicroSubmit)        // 提交订单

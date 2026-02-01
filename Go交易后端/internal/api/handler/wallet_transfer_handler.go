@@ -131,13 +131,13 @@ func (h *WalletTransferHandler) Transfer(c *gin.Context) {
 	fromWallet := model.WalletType(req.FromWallet)
 	toWallet := model.WalletType(req.ToWallet)
 
-	if fromWallet != model.WalletTypeSpot && fromWallet != model.WalletTypeContract {
-		response.FailWithMessage(c, "转出钱包类型无效，仅支持 spot(现货) 或 contract(合约)")
+	if fromWallet != model.WalletTypeSpot && fromWallet != model.WalletTypeContract && fromWallet != model.WalletTypeDelivery {
+		response.FailWithMessage(c, "转出钱包类型无效，仅支持 spot(现货)、contract(合约) 或 delivery(交割)")
 		return
 	}
 
-	if toWallet != model.WalletTypeSpot && toWallet != model.WalletTypeContract {
-		response.FailWithMessage(c, "转入钱包类型无效，仅支持 spot(现货) 或 contract(合约)")
+	if toWallet != model.WalletTypeSpot && toWallet != model.WalletTypeContract && toWallet != model.WalletTypeDelivery {
+		response.FailWithMessage(c, "转入钱包类型无效，仅支持 spot(现货)、contract(合约) 或 delivery(交割)")
 		return
 	}
 
