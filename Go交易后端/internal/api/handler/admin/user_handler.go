@@ -19,6 +19,7 @@ type UserListItem struct {
 	model.User
 	SpotBalance     float64 `json:"spot_balance"`
 	ContractBalance float64 `json:"contract_balance"`
+	DeliveryBalance float64 `json:"delivery_balance"`
 }
 
 // ============ 用户管理 ============
@@ -37,7 +38,7 @@ func GetUserList(c *gin.Context) {
 		return
 	}
 
-	// 查询每个用户的现货和合约余额
+	// 查询每个用户的现货、永续合约和交割合约余额
 	walletService := service.GetWalletTransferService()
 	userList := make([]UserListItem, 0, len(list))
 	for _, user := range list {
@@ -45,6 +46,7 @@ func GetUserList(c *gin.Context) {
 			User:            user,
 			SpotBalance:     0,
 			ContractBalance: 0,
+			DeliveryBalance: 0,
 		}
 
 		// 获取用户钱包余额
@@ -52,6 +54,7 @@ func GetUserList(c *gin.Context) {
 		if err == nil && balance != nil {
 			item.SpotBalance, _ = balance.SpotBalance.Float64()
 			item.ContractBalance, _ = balance.ContractBalance.Float64()
+			item.DeliveryBalance, _ = balance.DeliveryBalance.Float64()
 		}
 
 		userList = append(userList, item)
@@ -193,12 +196,12 @@ func ResetPassword(c *gin.Context) {
 	response.Success(c, "重置成功")
 }
 
-// AdjustBalance 余额调节（支持现货和合约账户）
+// AdjustBalance 余额调节（支持现货、永续合约和交割合约账户）
 func AdjustBalance(c *gin.Context) {
 	var req struct {
 		UserID      uint    `json:"user_id" binding:"required"`
 		CurrencyID  uint    `json:"currency_id" binding:"required"`
-		WalletType  string  `json:"wallet_type"` // spot: 现货账户, contract: 合约账户
+		WalletType  string  `json:"wallet_type"` // spot: 现货账户, contract: 永续合约账户, delivery: 交割合约账户
 		Amount      float64 `json:"amount" binding:"required"`
 		Reason      string  `json:"reason"` // 可选字段，默认为空
 	}
@@ -219,8 +222,8 @@ func AdjustBalance(c *gin.Context) {
 	}
 
 	// 验证钱包类型
-	if req.WalletType != "spot" && req.WalletType != "contract" {
-		response.BadRequest(c, "钱包类型无效，只能是 spot 或 contract")
+	if req.WalletType != "spot" && req.WalletType != "contract" && req.WalletType != "delivery" {
+		response.BadRequest(c, "钱包类型无效，只能是 spot、contract 或 delivery")
 		return
 	}
 

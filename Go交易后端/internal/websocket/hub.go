@@ -491,41 +491,5 @@ var newline = []byte{'\n'}
 func BroadcastToUser(userID uint64, data interface{}) {
 	hub := GetHub()
 	channel := fmt.Sprintf("wallet:%d", userID)
-	
-	msg := Message{
-		Type:      "wallet_update",
-		Channel:   channel,
-		Data:      data,
-		Timestamp: time.Now().Unix(),
-	}
-
-	msgBytes, err := json.Marshal(msg)
-	if err != nil {
-		logger.Errorf("Failed to marshal wallet message: %v", err)
-		return
-	}
-
-	hub.mutex.RLock()
-	var clientsToDelete []*Client
-	for client := range hub.clients {
-		if client.isSubscribed(channel) {
-			select {
-			case client.send <- msgBytes:
-			default:
-				clientsToDelete = append(clientsToDelete, client)
-			}
-		}
-	}
-	hub.mutex.RUnlock()
-
-	if len(clientsToDelete) > 0 {
-		hub.mutex.Lock()
-		for _, client := range clientsToDelete {
-			if _, ok := hub.clients[client]; ok {
-				delete(hub.clients, client)
-				client.closeOnce()
-			}
-		}
-		hub.mutex.Unlock()
-	}
+	hub.SendToChannel(channel, data)
 }

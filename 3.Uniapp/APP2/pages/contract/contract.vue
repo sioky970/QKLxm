@@ -855,6 +855,7 @@ const limitPrice = ref('')
 const userAssets = computed(() => walletStore.state.assets)
 const usdtBalance = computed(() => walletStore.state.usdtBalance)
 const contractBalance = computed(() => walletStore.state.contractBalance)
+const deliveryBalance = computed(() => walletStore.state.deliveryBalance)
 const currentCoinBalance = computed(() => {
 	const coinName = currentCoinName.value
 	const coinAsset = walletStore.state.assets.find(asset => asset.name === coinName)
@@ -905,9 +906,15 @@ const currentCoinName = computed(() => {
 	return 'ETH'
 })
 
-// 可用余额（合约页面显示合约账户余额）
+// 可用余额（根据标签页显示对应账户余额）
 const availableBalance = computed(() => {
-	return contractBalance.value.toFixed(4)
+	if (mainTab.value === 'seconds') {
+		// 交割合约显示交割合约账户余额
+		return deliveryBalance.value.toFixed(4)
+	} else {
+		// 永续合约显示永续合约账户余额
+		return contractBalance.value.toFixed(4)
+	}
 })
 
 // 价格变化追踪
@@ -1542,8 +1549,9 @@ const handleSecondsTrade = async (side) => {
 		uni.showToast({ title: `最低投入 ${minAmount} USDT`, icon: 'none' })
 		return
 	}
-	if (amount > usdtBalance.value) {
-		uni.showToast({ title: 'USDT余额不足', icon: 'none' })
+	// 校验交割合约账户余额
+	if (amount > deliveryBalance.value) {
+		uni.showToast({ title: '交割合约账户余额不足', icon: 'none' })
 		return
 	}
 	
@@ -1659,8 +1667,9 @@ const handleOpenPosition = async (side) => {
 		return
 	}
 	
-	if (margin > usdtBalance.value) {
-		uni.showToast({ title: 'USDT余额不足', icon: 'none' })
+	// 校验永续合约账户余额
+	if (margin > contractBalance.value) {
+		uni.showToast({ title: '永续合约账户余额不足', icon: 'none' })
 		return
 	}
 	

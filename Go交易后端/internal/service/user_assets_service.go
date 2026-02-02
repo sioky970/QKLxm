@@ -563,9 +563,20 @@ func (s *UserAssetsService) GetAssetOverviewFromUserAssets(userID uint) (*AssetO
 		}
 	}
 
-	// 计算总资产（现货 + 合约）
+	// 获取交割钱包资产
+	deliveryAssets, err := s.GetDeliveryAssets(userID)
+	if err != nil {
+		logger.Errorf("[UserAssets] 获取交割资产失败: userID=%d, err=%v", userID, err)
+		deliveryAssets = &model.UserAssets{
+			UsdtBalance: 0,
+			UsdtLocked:  0,
+		}
+	}
+
+	// 计算总资产（现货 + 合约 + 交割）
 	totalUsdt := spotAssets.UsdtBalance + spotAssets.UsdtLocked +
-		contractAssets.UsdtBalance + contractAssets.UsdtLocked
+		contractAssets.UsdtBalance + contractAssets.UsdtLocked +
+		deliveryAssets.UsdtBalance + deliveryAssets.UsdtLocked
 
 	// 获取所有启用的币种列表
 	var currencies []model.Currency
@@ -579,14 +590,18 @@ func (s *UserAssetsService) GetAssetOverviewFromUserAssets(userID uint) (*AssetO
 
 	// 添加USDT资产（始终显示）
 	usdtPrice := 1.0
+	totalUsdtBalance := spotAssets.UsdtBalance + spotAssets.UsdtLocked +
+		contractAssets.UsdtBalance + contractAssets.UsdtLocked +
+		deliveryAssets.UsdtBalance + deliveryAssets.UsdtLocked
+
 	usdtItem := AssetItemInfo{
 		CurrencyID:   1,
 		CurrencyName: "USDT",
 		Symbol:       "USDT",
 		Logo:         "",
-		Balance:      spotAssets.UsdtBalance + spotAssets.UsdtLocked,
-		UsdtValue:    spotAssets.UsdtBalance + spotAssets.UsdtLocked,
-		UsdValue:     (spotAssets.UsdtBalance + spotAssets.UsdtLocked) * usdtPrice,
+		Balance:      totalUsdtBalance,
+		UsdtValue:    totalUsdtBalance,
+		UsdValue:     totalUsdtBalance * usdtPrice,
 		Price:        usdtPrice,
 		Sort:         100,
 	}

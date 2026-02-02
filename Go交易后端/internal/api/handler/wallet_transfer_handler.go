@@ -57,6 +57,7 @@ type WalletBalanceRequest struct {
 type WalletBalanceResponse struct {
 	SpotBalance     string `json:"spot_balance"`
 	ContractBalance string `json:"contract_balance"`
+	DeliveryBalance string `json:"delivery_balance"`
 	TotalBalance    string `json:"total_balance"`
 	CurrencyName    string `json:"currency_name"`
 	CurrencyID      uint64 `json:"currency_id"`
@@ -109,6 +110,7 @@ func (h *WalletTransferHandler) GetBalance(c *gin.Context) {
 	response.SuccessWithData(c, WalletBalanceResponse{
 		SpotBalance:     balance.SpotBalance.StringFixed(4),
 		ContractBalance: balance.ContractBalance.StringFixed(4),
+		DeliveryBalance: balance.DeliveryBalance.StringFixed(4),
 		TotalBalance:    balance.TotalBalance.StringFixed(4),
 		CurrencyName:    balance.CurrencyName,
 		CurrencyID:      balance.CurrencyID,

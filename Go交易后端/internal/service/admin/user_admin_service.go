@@ -111,13 +111,15 @@ func (s *UserAdminService) ResetPassword(id uint, password string) (err error) {
 	return database.DB.Model(&model.User{}).Where("id = ?", id).Update("password", string(hashedPassword)).Error
 }
 
-// AdjustBalance 余额调节（使用UserAssets表，支持现货和合约账户）
+// AdjustBalance 余额调节（使用UserAssets表，支持现货、永续合约和交割合约账户）
 func (s *UserAdminService) AdjustBalance(userID uint, currencyID uint, walletType string, amount float64, reason string) error {
 	logger.Infof("[AdjustBalance] 开始调整余额: userID=%d, currencyID=%d, walletType=%s, amount=%.8f", userID, currencyID, walletType, amount)
 
 	walletTypeEnum := model.WalletTypeSpot
 	if walletType == "contract" {
 		walletTypeEnum = model.WalletTypeContract
+	} else if walletType == "delivery" {
+		walletTypeEnum = model.WalletTypeDelivery
 	}
 
 	return database.DB.Transaction(func(tx *gorm.DB) error {
@@ -172,15 +174,21 @@ func (s *UserAdminService) AdjustBalance(userID uint, currencyID uint, walletTyp
 		logType := 100
 		if walletType == "spot" {
 			if amount > 0 {
-				logType = 101
+				logType = 101 // 现货充值
 			} else {
-				logType = 102
+				logType = 102 // 现货扣除
 			}
-		} else {
+		} else if walletType == "contract" {
 			if amount > 0 {
-				logType = 103
+				logType = 103 // 永续合约充值
 			} else {
-				logType = 104
+				logType = 104 // 永续合约扣除
+			}
+		} else if walletType == "delivery" {
+			if amount > 0 {
+				logType = 105 // 交割合约充值
+			} else {
+				logType = 106 // 交割合约扣除
 			}
 		}
 

@@ -1,7 +1,6 @@
 package service
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -30,6 +29,7 @@ func GetWalletTransferService() *WalletTransferService {
 type WalletBalanceResponse struct {
 	SpotBalance     decimal.Decimal `json:"spot_balance"`
 	ContractBalance decimal.Decimal `json:"contract_balance"`
+	DeliveryBalance decimal.Decimal `json:"delivery_balance"`
 	TotalBalance    decimal.Decimal `json:"total_balance"`
 	CurrencyName    string          `json:"currency_name"`
 	CurrencyID      uint64          `json:"currency_id"`
@@ -83,6 +83,7 @@ func (s *WalletTransferService) GetUserAllWallets(userID uint64) (*WalletBalance
 	return &WalletBalanceResponse{
 		SpotBalance:     spotBalance,
 		ContractBalance: contractBalance,
+		DeliveryBalance: deliveryBalance,
 		TotalBalance:    totalBalance,
 		CurrencyName:    "USDT",
 		CurrencyID:      1,
@@ -143,36 +144,55 @@ func (s *WalletTransferService) Transfer(userID uint64, fromWallet, toWallet mod
 
 	amountFloat, _ := amount.Float64()
 
+	logger.Infof("[WalletTransfer] 开始划转: userID=%d, from=%s, to=%s, amount=%s", userID, fromWallet, toWallet, amount.String())
+
 	err := database.DB.Transaction(func(tx *gorm.DB) error {
-		fromAssets, err := GetUserAssetsService().GetUserAssetsByType(uint(userID), fromWallet)
-		if err != nil {
-			return errors.New(fmt.Sprintf("%s余额不足", fromWalletName))
+		// 获取转出账户资产
+		var fromAssets model.UserAssets
+		if err := tx.Where("user_id = ? AND wallet_type = ?", userID, fromWallet).First(&fromAssets).Error; err != nil {
+			return fmt.Errorf("%s不存在", fromWalletName)
 		}
 
 		tolerance := decimal.NewFromFloat(0.0001)
 		fromBalance := decimal.NewFromFloat(fromAssets.UsdtBalance)
 		if fromBalance.Add(tolerance).LessThan(amount) {
-			return errors.New(fmt.Sprintf("%s余额不足，当前可用余额: %s", fromWalletName, fromBalance.StringFixed(4)))
+			return fmt.Errorf("%s余额不足，当前可用余额: %s", fromWalletName, fromBalance.StringFixed(4))
 		}
 
+		// 扣除转出账户余额
 		if amount.GreaterThan(fromBalance) && amount.Sub(fromBalance).LessThanOrEqual(tolerance) {
 			amountFloat = fromAssets.UsdtBalance
 		}
-
-		if err := GetUserAssetsService().UpdateUsdtBalanceByType(uint(userID), -amountFloat, false, fromWallet); err != nil {
+		
+		if err := tx.Model(&model.UserAssets{}).Where("id = ?", fromAssets.ID).Update("usdt_balance", gorm.Expr("usdt_balance - ?", amountFloat)).Error; err != nil {
 			return err
 		}
 
-		_, err = GetUserAssetsService().GetUserAssetsByType(uint(userID), toWallet)
+		// 增加转入账户余额
+		var toAssets model.UserAssets
+		err := tx.Where("user_id = ? AND wallet_type = ?", userID, toWallet).First(&toAssets).Error
 		if err != nil {
-			_, err = GetUserAssetsService().CreateUserAssetsByType(uint(userID), toWallet)
-			if err != nil {
+			if err == gorm.ErrRecordNotFound {
+				// 创建转入账户
+				toAssets = model.UserAssets{
+					UserID:           uint(userID),
+					WalletType:       toWallet,
+					UsdtBalance:      amountFloat,
+					CreateTime:       now,
+					UpdateTime:       now,
+					CurrencyBalances: make(model.CurrencyBalance),
+					CurrencyLocked:   make(model.CurrencyBalance),
+				}
+				if err := tx.Create(&toAssets).Error; err != nil {
+					return err
+				}
+			} else {
 				return err
 			}
-		}
-
-		if err := GetUserAssetsService().UpdateUsdtBalanceByType(uint(userID), amountFloat, false, toWallet); err != nil {
-			return err
+		} else {
+			if err := tx.Model(&model.UserAssets{}).Where("id = ?", toAssets.ID).Update("usdt_balance", gorm.Expr("usdt_balance + ?", amountFloat)).Error; err != nil {
+				return err
+			}
 		}
 
 		record.Status = model.TransferStatusSuccess
@@ -216,13 +236,13 @@ func (s *WalletTransferService) Transfer(userID uint64, fromWallet, toWallet mod
 		FromWallet:  fromWalletName,
 		ToWallet:    toWalletName,
 		Amount:      amount.StringFixed(4),
-		FromBalance: s.GetWalletBalanceDisplay(fromWallet),
-		ToBalance:   s.GetWalletBalanceDisplay(toWallet),
+		FromBalance: s.GetWalletBalanceDisplay(userID, fromWallet),
+		ToBalance:   s.GetWalletBalanceDisplay(userID, toWallet),
 	}
 }
 
-func (s *WalletTransferService) GetWalletBalanceDisplay(walletType model.WalletType) string {
-	return fmt.Sprintf("可用余额: %s USDT", s.GetUserWalletBalanceDisplay(0, walletType))
+func (s *WalletTransferService) GetWalletBalanceDisplay(userID uint64, walletType model.WalletType) string {
+	return fmt.Sprintf("可用余额: %s USDT", s.GetUserWalletBalanceDisplay(userID, walletType))
 }
 
 func (s *WalletTransferService) GetUserWalletBalanceDisplay(userID uint64, walletType model.WalletType) string {
@@ -246,6 +266,7 @@ func (s *WalletTransferService) broadcastBalanceUpdate(userID uint64) {
 			"user_id":          userID,
 			"spot_balance":     balance.SpotBalance.StringFixed(4),
 			"contract_balance": balance.ContractBalance.StringFixed(4),
+			"delivery_balance": balance.DeliveryBalance.StringFixed(4),
 			"total_balance":    balance.TotalBalance.StringFixed(4),
 			"currency_name":    balance.CurrencyName,
 			"timestamp":        time.Now().Unix(),
@@ -254,8 +275,8 @@ func (s *WalletTransferService) broadcastBalanceUpdate(userID uint64) {
 
 	websocket.BroadcastToUser(userID, msg)
 
-	logger.Debugf("[WalletTransfer] 广播余额更新: userID=%d, spot=%s, contract=%s, total=%s",
-		userID, balance.SpotBalance.String(), balance.ContractBalance.String(), balance.TotalBalance.String())
+	logger.Debugf("[WalletTransfer] 广播余额更新: userID=%d, spot=%s, contract=%s, delivery=%s, total=%s",
+		userID, balance.SpotBalance.String(), balance.ContractBalance.String(), balance.DeliveryBalance.String(), balance.TotalBalance.String())
 }
 
 func (s *WalletTransferService) GetTransferRecords(userID uint64, page, pageSize int) ([]model.WalletTransferRecord, int64, error) {

@@ -22,8 +22,11 @@ const state = reactive({
 	// 现货账户余额
 	spotBalance: 0,
 	
-	// 合约账户余额
+	// 永续合约账户余额
 	contractBalance: 0,
+	
+	// 交割合约账户余额
+	deliveryBalance: 0,
 	
 	// 资产列表（不包含USDT）
 	assets: [],
@@ -58,14 +61,18 @@ const handleBalanceUpdate = (data) => {
 		state.totalUsdValue = parseFloat(data.total_balance) || 0
 	}
 	
-	// 更新现货和合约账户余额（后端推送的数据是字符串格式）
+	// 更新现货、永续合约和交割账户余额（后端推送的数据是字符串格式）
 	if (data.spot_balance !== undefined) {
 		state.spotBalance = parseFloat(data.spot_balance) || 0
 		console.log('[WalletStore] 现货余额已更新:', state.spotBalance)
 	}
 	if (data.contract_balance !== undefined) {
 		state.contractBalance = parseFloat(data.contract_balance) || 0
-		console.log('[WalletStore] 合约余额已更新:', state.contractBalance)
+		console.log('[WalletStore] 永续合约余额已更新:', state.contractBalance)
+	}
+	if (data.delivery_balance !== undefined) {
+		state.deliveryBalance = parseFloat(data.delivery_balance) || 0
+		console.log('[WalletStore] 交割余额已更新:', state.deliveryBalance)
 	}
 	
 	// 更新盈亏数据
@@ -200,20 +207,21 @@ const fetchAssetData = async (force = false) => {
 				}))
 		}
 		
-		// 处理现货和合约账户余额
+		// 处理现货、永续合约和交割账户余额
 		if (balanceRes && balanceRes.data) {
 			const balanceData = balanceRes.data
 			state.spotBalance = parseFloat(balanceData.spot_balance) || 0
 			state.contractBalance = parseFloat(balanceData.contract_balance) || 0
+			state.deliveryBalance = parseFloat(balanceData.delivery_balance) || 0
 			
-			// 更新总余额（如果后端返回的总余额不一致，以现货+合约为准）
-			const calculatedTotal = state.spotBalance + state.contractBalance
+			// 更新总余额（如果后端返回的总余额不一致，以三账户余额之和为准）
+			const calculatedTotal = state.spotBalance + state.contractBalance + state.deliveryBalance
 			if (calculatedTotal > 0 && Math.abs(calculatedTotal - state.totalBalance) > 0.0001) {
 				state.totalBalance = calculatedTotal
 				state.totalUsdValue = calculatedTotal
 			}
 			
-			console.log('[WalletStore] 钱包余额已更新: 现货=', state.spotBalance, ', 合约=', state.contractBalance)
+			console.log('[WalletStore] 钱包余额已更新: 现货=', state.spotBalance, ', 永续合约=', state.contractBalance, ', 交割=', state.deliveryBalance)
 		} else {
 			console.log('[WalletStore] 钱包余额API返回异常: balanceRes=', balanceRes)
 		}
@@ -258,6 +266,7 @@ const reset = () => {
 	state.usdtBalance = 0
 	state.spotBalance = 0
 	state.contractBalance = 0
+	state.deliveryBalance = 0
 	state.assets = []
 	state.isInitialized = false
 	state.userId = null

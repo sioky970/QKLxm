@@ -14,40 +14,46 @@
 		<view class="content">
 			<!-- 划转方向选择卡片 -->
 			<view class="direction-card">
-				<view class="direction-title">划转方向</view>
-				<view class="direction-selector">
-					<!-- 转出账户 -->
-					<view class="account-box" :class="{ active: transferDirection === 'spot_to_contract' }" @tap="setDirection('spot_to_contract')">
-						<view class="account-icon spot-icon">
-							<SvgIcon name="wallet" :size="28" color="#fff" />
+				<view class="transfer-box">
+					<view class="transfer-main">
+						<!-- 转出账户 -->
+						<view class="transfer-item">
+							<view class="transfer-label">从</view>
+							<picker @change="onFromChange" :value="fromIndex" :range="wallets" range-key="name" class="account-picker">
+								<view class="picker-content">
+									<view class="account-brief">
+										<view class="account-icon" :style="{ background: wallets[fromIndex].color }">
+											<SvgIcon :name="wallets[fromIndex].icon" :size="18" color="#fff" />
+										</view>
+										<text class="account-name">{{ wallets[fromIndex].name }}</text>
+									</view>
+									<SvgIcon name="arrow-down" :size="16" color="#999" />
+								</view>
+							</picker>
 						</view>
-						<view class="account-info">
-							<text class="account-name">现货账户</text>
-							<text class="account-balance">{{ formatBalance(spotBalance) }} USDT</text>
+						
+						<!-- 分割线及交换按钮 -->
+						<view class="transfer-divider">
+							<view class="divider-line"></view>
+							<view class="swap-btn-mini" @tap="swapDirection">
+								<SvgIcon name="swap" :size="20" color="#007AFF" />
+							</view>
 						</view>
-						<view class="check-icon" v-if="transferDirection === 'spot_to_contract'">
-							<SvgIcon name="check" :size="20" color="#007AFF" />
-						</view>
-					</view>
-
-					<!-- 交换按钮 -->
-					<view class="swap-btn" @tap="swapDirection">
-						<view class="swap-icon">
-							<SvgIcon name="swap" :size="24" color="#007AFF" />
-						</view>
-					</view>
-
-					<!-- 转入账户 -->
-					<view class="account-box" :class="{ active: transferDirection === 'contract_to_spot' }" @tap="setDirection('contract_to_spot')">
-						<view class="account-icon contract-icon">
-							<SvgIcon name="chart" :size="28" color="#fff" />
-						</view>
-						<view class="account-info">
-							<text class="account-name">合约账户</text>
-							<text class="account-balance">{{ formatBalance(contractBalance) }} USDT</text>
-						</view>
-						<view class="check-icon" v-if="transferDirection === 'contract_to_spot'">
-							<SvgIcon name="check" :size="20" color="#007AFF" />
+						
+						<!-- 转入账户 -->
+						<view class="transfer-item">
+							<view class="transfer-label">到</view>
+							<picker @change="onToChange" :value="toIndex" :range="wallets" range-key="name" class="account-picker">
+								<view class="picker-content">
+									<view class="account-brief">
+										<view class="account-icon" :style="{ background: wallets[toIndex].color }">
+											<SvgIcon :name="wallets[toIndex].icon" :size="18" color="#fff" />
+										</view>
+										<text class="account-name">{{ wallets[toIndex].name }}</text>
+									</view>
+									<SvgIcon name="arrow-down" :size="16" color="#999" />
+								</view>
+							</picker>
 						</view>
 					</view>
 				</view>
@@ -188,19 +194,47 @@ import walletStore from '@/stores/walletStore.js'
 import { walletTransferApi } from '@/utils/api.js'
 
 const statusBarHeight = ref(0)
-const transferDirection = ref('spot_to_contract')
+const fromWallet = ref('spot') // 转出钱包
+const toWallet = ref('contract') // 转入钱包
 const transferAmount = ref('')
 const amountError = ref('')
 const isTransferring = ref(false)
 const sliderValue = ref(0)
 
+const wallets = [
+	{ id: 'spot', name: '现货账户', icon: 'wallet', color: 'linear-gradient(135deg, #52c41a 0%, #389e0d 100%)' },
+	{ id: 'contract', name: '永续合约账户', icon: 'chart', color: 'linear-gradient(135deg, #fa8c16 0%, #d46b08 100%)' },
+	{ id: 'delivery', name: '交割合约账户', icon: 'position', color: 'linear-gradient(135deg, #722ed1 0%, #531dab 100%)' }
+]
+
+const fromIndex = computed(() => wallets.findIndex(w => w.id === fromWallet.value))
+const toIndex = computed(() => wallets.findIndex(w => w.id === toWallet.value))
+
+const onFromChange = (e) => {
+	const index = e.detail.value
+	setFromWallet(wallets[index].id)
+}
+
+const onToChange = (e) => {
+	const index = e.detail.value
+	setToWallet(wallets[index].id)
+}
+
 // 获取钱包余额
 const spotBalance = computed(() => walletStore.state.spotBalance)
 const contractBalance = computed(() => walletStore.state.contractBalance)
+const deliveryBalance = computed(() => walletStore.state.deliveryBalance)
 
-// 可用余额（根据划转方向）
+// 可用余额（根据转出钱包）
 const availableBalance = computed(() => {
-	return transferDirection.value === 'spot_to_contract' ? spotBalance.value : contractBalance.value
+	if (fromWallet.value === 'spot') {
+		return spotBalance.value
+	} else if (fromWallet.value === 'contract') {
+		return contractBalance.value
+	} else if (fromWallet.value === 'delivery') {
+		return deliveryBalance.value
+	}
+	return 0
 })
 
 // 格式化余额显示
@@ -227,9 +261,46 @@ const canSubmit = computed(() => {
 	return amount > 0 && amount <= availableBalance.value && !isTransferring.value && !amountError.value
 })
 
-// 设置划转方向
-const setDirection = (direction) => {
-	transferDirection.value = direction
+// 设置转出钱包
+const setFromWallet = (wallet) => {
+	fromWallet.value = wallet
+	// 如果转出钱包与转入钱包相同，切换转入钱包
+	if (toWallet.value === wallet) {
+		if (wallet === 'spot') {
+			toWallet.value = 'contract'
+		} else if (wallet === 'contract') {
+			toWallet.value = 'delivery'
+		} else {
+			toWallet.value = 'spot'
+		}
+	}
+	transferAmount.value = ''
+	amountError.value = ''
+	sliderValue.value = 0
+}
+
+// 设置转入钱包
+const setToWallet = (wallet) => {
+	toWallet.value = wallet
+	// 如果转入钱包与转出钱包相同，切换转出钱包
+	if (fromWallet.value === wallet) {
+		if (wallet === 'contract') {
+			fromWallet.value = 'spot'
+		} else if (wallet === 'delivery') {
+			fromWallet.value = 'contract'
+		} else {
+			fromWallet.value = 'contract'
+		}
+	}
+	transferAmount.value = ''
+	amountError.value = ''
+	sliderValue.value = 0
+}
+
+// 快捷转账到交割账户
+const quickTransfer = (from, to) => {
+	fromWallet.value = from
+	toWallet.value = to
 	transferAmount.value = ''
 	amountError.value = ''
 	sliderValue.value = 0
@@ -237,7 +308,9 @@ const setDirection = (direction) => {
 
 // 切换划转方向
 const swapDirection = () => {
-	transferDirection.value = transferDirection.value === 'spot_to_contract' ? 'contract_to_spot' : 'spot_to_contract'
+	const temp = fromWallet.value
+	fromWallet.value = toWallet.value
+	toWallet.value = temp
 	transferAmount.value = ''
 	amountError.value = ''
 	sliderValue.value = 0
@@ -313,15 +386,12 @@ const handleTransfer = async () => {
 	isTransferring.value = true
 	const amount = parseFloat(transferAmount.value)
 
-	const fromWallet = transferDirection.value === 'spot_to_contract' ? 'spot' : 'contract'
-	const toWallet = transferDirection.value === 'spot_to_contract' ? 'contract' : 'spot'
-
 	try {
-		console.log('[Transfer] 开始划转:', { fromWallet, toWallet, amount })
+		console.log('[Transfer] 开始划转:', { fromWallet: fromWallet.value, toWallet: toWallet.value, amount })
 
 		const res = await walletTransferApi.transfer({
-			from_wallet: fromWallet,
-			to_wallet: toWallet,
+			from_wallet: fromWallet.value,
+			to_wallet: toWallet.value,
 			amount: amount
 		})
 
@@ -440,96 +510,89 @@ onMounted(() => {
 	padding: 30rpx;
 	margin-bottom: 20rpx;
 
-	.direction-title {
-		font-size: 32rpx;
-		font-weight: 600;
-		color: #333;
-		margin-bottom: 24rpx;
-	}
-
-	.direction-selector {
-		display: flex;
-		flex-direction: column;
-		gap: 20rpx;
-	}
-
-	.account-box {
-		display: flex;
-		align-items: center;
-		padding: 24rpx;
-		background: #f8f9fa;
-		border-radius: 16rpx;
-		border: 2rpx solid transparent;
-		transition: all 0.3s ease;
-
-		&.active {
-			background: #f0f7ff;
-			border-color: #007AFF;
-		}
-
-		.account-icon {
-			width: 64rpx;
-			height: 64rpx;
-			border-radius: 50%;
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			margin-right: 20rpx;
-
-			&.spot-icon {
-				background: linear-gradient(135deg, #52c41a 0%, #389e0d 100%);
-			}
-
-			&.contract-icon {
-				background: linear-gradient(135deg, #fa8c16 0%, #d46b08 100%);
-			}
-		}
-
-		.account-info {
-			flex: 1;
+	.transfer-box {
+		.transfer-main {
 			display: flex;
 			flex-direction: column;
+		}
 
-			.account-name {
-				font-size: 30rpx;
-				font-weight: 500;
-				color: #333;
-				margin-bottom: 8rpx;
+		.transfer-item {
+			display: flex;
+			align-items: center;
+			padding: 10rpx 0;
+
+			.transfer-label {
+				width: 60rpx;
+				font-size: 28rpx;
+				color: #999;
 			}
 
-			.account-balance {
-				font-size: 26rpx;
-				color: #666;
+			.account-picker {
+				flex: 1;
+
+				.picker-content {
+					display: flex;
+					align-items: center;
+					justify-content: space-between;
+					padding: 24rpx;
+					background: #f8f9fa;
+					border-radius: 16rpx;
+
+					.account-brief {
+						display: flex;
+						align-items: center;
+						gap: 16rpx;
+
+						.account-icon {
+							width: 48rpx;
+							height: 48rpx;
+							border-radius: 50%;
+							display: flex;
+							align-items: center;
+							justify-content: center;
+						}
+
+						.account-name {
+							font-size: 30rpx;
+							font-weight: 500;
+							color: #333;
+						}
+					}
+				}
 			}
 		}
 
-		.check-icon {
-			width: 40rpx;
-			height: 40rpx;
+		.transfer-divider {
+			position: relative;
+			height: 20rpx;
 			display: flex;
 			align-items: center;
-			justify-content: center;
-		}
-	}
+			margin-left: 60rpx;
+			margin-right: 20rpx;
 
-	.swap-btn {
-		display: flex;
-		justify-content: center;
-		padding: 10rpx 0;
+			.divider-line {
+				flex: 1;
+				height: 1rpx;
+				background: #f0f0f0;
+			}
 
-		.swap-icon {
-			width: 72rpx;
-			height: 72rpx;
-			background: #fff;
-			border-radius: 50%;
-			box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.1);
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			transition: transform 0.3s ease;
+			.swap-btn-mini {
+				position: absolute;
+				right: 40rpx;
+				width: 56rpx;
+				height: 56rpx;
+				background: #fff;
+				border-radius: 50%;
+				box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.1);
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				z-index: 2;
+				transition: all 0.3s ease;
 
-			&:active {
-				transform: rotate(180deg);
+				&:active {
+					transform: scale(0.9) rotate(180deg);
+				}
 			}
 		}
 	}

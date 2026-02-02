@@ -942,8 +942,8 @@ func (s *WalletService) BroadcastBalanceUpdate(userID uint) {
 		return
 	}
 
-	// 获取现货和合约钱包余额
-	var spotBalance, contractBalance string = "0", "0"
+	// 获取现货、合约和交割钱包余额
+	var spotBalance, contractBalance, deliveryBalance string = "0", "0", "0"
 	walletTransferSvc := GetWalletTransferService()
 	walletBalance, err := walletTransferSvc.GetUserAllWallets(uint64(userID))
 	if err != nil {
@@ -951,6 +951,7 @@ func (s *WalletService) BroadcastBalanceUpdate(userID uint) {
 	} else {
 		spotBalance = walletBalance.SpotBalance.StringFixed(4)
 		contractBalance = walletBalance.ContractBalance.StringFixed(4)
+		deliveryBalance = walletBalance.DeliveryBalance.StringFixed(4)
 	}
 
 	// 构建WebSocket消息数据
@@ -962,6 +963,7 @@ func (s *WalletService) BroadcastBalanceUpdate(userID uint) {
 		"today_profit_rate": assetOverview.TodayProfitRate,
 		"spot_balance":      spotBalance,
 		"contract_balance":  contractBalance,
+		"delivery_balance":  deliveryBalance,
 		"assets":            assetOverview.Assets,
 		"update_time":       time.Now().Unix(),
 	}
@@ -971,8 +973,8 @@ func (s *WalletService) BroadcastBalanceUpdate(userID uint) {
 	hub := websocket.GetHub()
 	hub.SendToChannel(channelName, data)
 
-	logger.Infof("[WS] 余额变更推送成功: userID=%d, channel=%s, spot=%s, contract=%s, balance=%.8f",
-		userID, channelName, spotBalance, contractBalance, assetOverview.TotalBalance)
+	logger.Infof("[WS] 余额变更推送成功: userID=%d, channel=%s, spot=%s, contract=%s, delivery=%s, balance=%.8f",
+		userID, channelName, spotBalance, contractBalance, deliveryBalance, assetOverview.TotalBalance)
 }
 
 // BroadcastOrderUpdate 推送订单状态变更

@@ -242,10 +242,28 @@
             style="cursor: pointer"
             @click="handleQuickAdjustBalance(record, 'contract')"
           >
-            <a-tooltip content="点击调整合约余额">
+            <a-tooltip content="点击调整永续合约余额">
               <div class="balance-amount">
                 <span class="balance-value">{{
                   (record.contract_balance || 0).toFixed(4)
+                }}</span>
+                <span class="balance-unit">USDT</span>
+              </div>
+            </a-tooltip>
+          </div>
+        </template>
+
+        <!-- 交割合约USDT余额列 -->
+        <template #deliveryBalance="{ record }">
+          <div
+            class="balance-cell"
+            style="cursor: pointer"
+            @click="handleQuickAdjustBalance(record, 'delivery')"
+          >
+            <a-tooltip content="点击调整交割合约余额">
+              <div class="balance-amount">
+                <span class="balance-value">{{
+                  (record.delivery_balance || 0).toFixed(4)
                 }}</span>
                 <span class="balance-unit">USDT</span>
               </div>
@@ -260,7 +278,7 @@
             type="round"
             checked-color="rgb(var(--green-6))"
             unchecked-color="rgb(var(--red-6))"
-            @change="(val: boolean) => handleQuickToggleStatus(record, val)"
+            @change="(val) => handleQuickToggleStatus(record, val as boolean)"
           >
             <template #checked>正常</template>
             <template #unchecked>锁定</template>
@@ -646,7 +664,10 @@
               <a-tag color="arcoblue" size="small">现货账户</a-tag>
             </a-radio>
             <a-radio value="contract">
-              <a-tag color="orange" size="small">合约账户</a-tag>
+              <a-tag color="orange" size="small">永续合约账户</a-tag>
+            </a-radio>
+            <a-radio value="delivery">
+              <a-tag color="purple" size="small">交割合约账户</a-tag>
             </a-radio>
           </a-radio-group>
         </a-form-item>
@@ -655,13 +676,15 @@
         <a-alert v-if="userWalletInfo" type="info" style="margin-bottom: 16px">
           <template #icon><icon-info-circle /></template>
           <div class="wallet-info">
-            <div class="wallet-title">当前 {{ adjustBalanceForm.wallet_type === 'spot' ? '现货' : '合约' }} USDT 余额</div>
+            <div class="wallet-title">
+              当前 {{ getWalletTypeName(adjustBalanceForm.wallet_type) }} USDT 余额
+            </div>
             <div style="margin-top: 12px; text-align: center">
               <div class="balance-item-large">
                 <div class="balance-label">可用余额</div>
-                <div class="balance-value-large"
-                  >{{ ((adjustBalanceForm.wallet_type === 'spot' ? userWalletInfo.spot_balance : userWalletInfo.contract_balance) || 0).toFixed(8) }} USDT</div
-                >
+                <div class="balance-value-large">
+                  {{ getCurrentBalance().toFixed(8) }} USDT
+                </div>
               </div>
             </div>
           </div>
@@ -818,7 +841,6 @@
     IconThunderbolt,
     IconClockCircle,
     IconLocation,
-    IconCopy,
     IconInfoCircle,
     IconExclamationCircle,
   } from '@arco-design/web-vue/es/icon';
@@ -875,7 +897,7 @@
   const adjustBalanceForm = reactive({
     user_id: '' as any,
     account: '',
-    wallet_type: 'spot' as 'spot' | 'contract',
+    wallet_type: 'spot' as 'spot' | 'contract' | 'delivery',
     operation_type: 'add',
     amount: 0,
     reason: '',
@@ -925,10 +947,17 @@
       align: 'right' as const,
     },
     {
-      title: '合约USDT',
+      title: '永续合约USDT',
       dataIndex: 'contractBalance',
       slotName: 'contractBalance',
-      width: 130,
+      width: 140,
+      align: 'right' as const,
+    },
+    {
+      title: '交割合约USDT',
+      dataIndex: 'deliveryBalance',
+      slotName: 'deliveryBalance',
+      width: 140,
       align: 'right' as const,
     },
     {
@@ -970,6 +999,7 @@
     'contact',
     'spotBalance',
     'contractBalance',
+    'deliveryBalance',
     'status',
     'risk',
     'loginInfo',
@@ -1079,11 +1109,6 @@
 
   const handleView = (record: any) =>
     router.push(`/admin/user/detail/${record.id}`);
-  const handleWallet = (record: any) =>
-    router.push({
-      path: '/admin/wallet/list',
-      query: { account_number: record.account_number || record.id },
-    });
   const handleViewParent = (record: any) =>
     router.push(`/admin/user/detail/${record.parent_id}`);
 
@@ -1297,7 +1322,10 @@
   };
 
   // 快速调整余额（点击余额时触发）
-  const handleQuickAdjustBalance = (record: any, walletType: 'spot' | 'contract' = 'spot') => {
+  const handleQuickAdjustBalance = (
+    record: any,
+    walletType: 'spot' | 'contract' | 'delivery' = 'spot'
+  ) => {
     // 直接使用列表中的余额数据，无需重新查询
     Object.assign(adjustBalanceForm, {
       user_id: record.id,
@@ -1313,9 +1341,36 @@
       currency_id: 3,
       spot_balance: record.spot_balance || 0,
       contract_balance: record.contract_balance || 0,
+      delivery_balance: record.delivery_balance || 0,
     };
 
     adjustBalanceVisible.value = true;
+  };
+
+  // 获取钱包类型名称
+  const getWalletTypeName = (type: string) => {
+    if (type === 'spot') return '现货';
+    if (type === 'contract') return '永续合约';
+    if (type === 'delivery') return '交割合约';
+    return '未知';
+  };
+
+  // 获取钱包类型完整名称（带“账户”）
+  const getWalletTypeFullName = (type: string) => {
+    if (type === 'spot') return '现货账户';
+    if (type === 'contract') return '永续合约账户';
+    if (type === 'delivery') return '交割合约账户';
+    return '未知账户';
+  };
+
+  // 获取当前余额
+  const getCurrentBalance = () => {
+    if (!userWalletInfo.value) return 0;
+    const type = adjustBalanceForm.wallet_type;
+    if (type === 'spot') return userWalletInfo.value.spot_balance || 0;
+    if (type === 'contract') return userWalletInfo.value.contract_balance || 0;
+    if (type === 'delivery') return userWalletInfo.value.delivery_balance || 0;
+    return 0;
   };
 
   const resetAdjustBalanceForm = () => {
@@ -1347,8 +1402,7 @@
     // 确认弹窗
     const operationText =
       adjustBalanceForm.operation_type === 'add' ? '充值' : '扣除';
-    const walletTypeText =
-      adjustBalanceForm.wallet_type === 'spot' ? '现货账户' : '合约账户';
+    const walletTypeText = getWalletTypeFullName(adjustBalanceForm.wallet_type);
 
     Modal.confirm({
       title: `确认${operationText}余额`,

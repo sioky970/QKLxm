@@ -74,10 +74,22 @@
 								<view class="wallet-icon-small contract-icon">
 									<SvgIcon name="chart" :size="16" color="#fff" />
 								</view>
-								<text class="wallet-balance-name">合约账户</text>
+								<text class="wallet-balance-name">永续合约账户</text>
 							</view>
 							<view class="wallet-balance-right">
 								<text class="wallet-balance-amount">{{ isAssetsVisible ? contractBalance : '****' }} USDT</text>
+								<SvgIcon name="arrow-right" :size="12" color="rgba(255,255,255,0.6)" />
+							</view>
+						</view>
+						<view class="wallet-balance-item" @tap="openTransferPopup">
+							<view class="wallet-balance-left">
+								<view class="wallet-icon-small delivery-icon">
+									<SvgIcon name="position" :size="16" color="#fff" />
+								</view>
+								<text class="wallet-balance-name">交割合约账户</text>
+							</view>
+							<view class="wallet-balance-right">
+								<text class="wallet-balance-amount">{{ isAssetsVisible ? deliveryBalance : '****' }} USDT</text>
 								<SvgIcon name="arrow-right" :size="12" color="rgba(255,255,255,0.6)" />
 							</view>
 						</view>
@@ -160,6 +172,7 @@ const totalBalance = computed(() => formatBalanceWith9Digits(walletStore.state.t
 const totalUsdValue = computed(() => formatBalanceWith9Digits(walletStore.state.totalUsdValue))
 const spotBalance = computed(() => formatBalanceWith9Digits(walletStore.state.spotBalance))
 const contractBalance = computed(() => formatBalanceWith9Digits(walletStore.state.contractBalance))
+const deliveryBalance = computed(() => formatBalanceWith9Digits(walletStore.state.deliveryBalance))
 const profitData = computed(() => ({
 	value: walletStore.state.todayProfit,
 	rate: formatPercent(walletStore.state.todayProfitRate)

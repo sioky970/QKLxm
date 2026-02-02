@@ -15,7 +15,7 @@ export const BASE_URL = isDev ? DEV_URL : PROD_URL
 
 // 调试信息（仅开发模式）
 if (isDev) {
-	console.log('[API] 开发模式，使用本地后端:', DEV_URL)
+	console.log('[API] 开发模式，使用线上后端:', DEV_URL)
 }
 
 // 请求拦截器
@@ -254,8 +254,8 @@ export const getAllAssetsWithBalance = () => {
  */
 export const walletTransferApi = {
 	/**
-	 * 获取总余额（现货+合约）
-	 * @returns {Promise<{spot_balance: string, contract_balance: string, total_balance: string, currency_name: string}>}
+	 * 获取总余额（现货+合约+交割）
+	 * @returns {Promise<{spot_balance: string, contract_balance: string, delivery_balance: string, total_balance: string, currency_name: string}>}
 	 */
 	getBalance() {
 		return request({
@@ -276,7 +276,7 @@ export const walletTransferApi = {
 	},
 	
 	/**
-	 * 获取合约钱包余额
+	 * 获取永续合约钱包余额
 	 * @returns {Promise<Object>}
 	 */
 	getContractBalance() {
@@ -287,10 +287,21 @@ export const walletTransferApi = {
 	},
 	
 	/**
+	 * 获取交割合约钱包余额
+	 * @returns {Promise<Object>}
+	 */
+	getDeliveryBalance() {
+		return request({
+			url: '/wallet/transfer/delivery',
+			method: 'GET'
+		})
+	},
+	
+	/**
 	 * 执行钱包划转
 	 * @param {Object} data - 划转参数
-	 * @param {string} data.from_wallet - 转出钱包: spot(现货) / contract(合约)
-	 * @param {string} data.to_wallet - 转入钱包: spot(现货) / contract(合约)
+	 * @param {string} data.from_wallet - 转出钱包: spot(现货) / contract(永续合约) / delivery(交割合约)
+	 * @param {string} data.to_wallet - 转入钱包: spot(现货) / contract(永续合约) / delivery(交割合约)
 	 * @param {number} data.amount - 划转金额
 	 * @returns {Promise<{success: boolean, transfer_no: string, error_msg: string}>}
 	 */

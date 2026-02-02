@@ -14,7 +14,7 @@ const WS_URL = isDev ? DEV_WS_URL : PROD_WS_URL
 
 // 调试信息（仅开发模式）
 if (isDev) {
-	console.log('[WS] 开发模式，使用本地WebSocket:', DEV_WS_URL)
+	console.log('[WS] 开发模式，使用线上WebSocket:', DEV_WS_URL)
 }
 
 class WebSocketClient {

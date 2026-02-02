@@ -76,7 +76,8 @@ const isLoading = ref(false)
 
 const walletTypeMap = {
 	'spot': '现货账户',
-	'contract': '合约账户'
+	'contract': '永续合约账户',
+	'delivery': '交割合约账户'
 }
 
 const statusMap = {
