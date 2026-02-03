@@ -1,0 +1,107 @@
+# ================================
+# 通用忽略规则
+# ================================
+
+# 操作系统文件
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# IDE 和编辑器
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# ================================
+# Go 后端 (1-Go交易后端)
+# ================================
+
+# 编译输出
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Go 特定
+1-Go交易后端/vendor/
+1-Go交易后端/go.sum
+
+# 日志文件
+*.log
+logs/
+
+# 配置文件中的敏感信息（保留示例配置）
+# 1-Go交易后端/config/config.yaml
+
+# 测试脚本输出
+1-Go交易后端/test_scripts/go.sum
+
+# ================================
+# UniApp 前端 (3.Uniapp/APP2)
+# ================================
+
+# 依赖目录
+3.Uniapp/APP2/node_modules/
+3.Uniapp/APP2/unpackage/
+3.Uniapp/APP2/dist/
+
+# ================================
+# UniApp 前端 (3.Uniapp/JYS) - 旧版本
+# ================================
+
+# 依赖目录
+3.Uniapp/JYS/node_modules/
+3.Uniapp/JYS/unpackage/
+3.Uniapp/JYS/dist/
+
+# ================================
+# 管理后台前端 (4-管理后台前端)
+# ================================
+
+# 依赖目录
+4-管理后台前端/arco-design-pro-vite/node_modules/
+4-管理后台前端/node_modules/
+
+# 构建输出
+4-管理后台前端/arco-design-pro-vite/dist/
+
+# 包管理器锁文件（保留 pnpm-lock.yaml 以确保依赖一致性）
+# 4-管理后台前端/arco-design-pro-vite/pnpm-lock.yaml
+
+# 本地环境配置
+.env.local
+.env.*.local
+
+# ================================
+# 根目录忽略
+# ================================
+
+# 编译产物
+api.exe
+
+# 临时文件
+nul
+*.tmp
+*.temp
+
+# 空目录占位
+5-数据库脚本/
+
+# 测试输出文件
+*.txt
+!更新说明.txt
+
+# 大型分析报告（可选，如果不想提交这些文档可取消注释）
+# *.md

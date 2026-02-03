@@ -1,0 +1,416 @@
+package database
+
+import (
+	"fmt"
+	"strings"
+	"time"
+
+	"exchange-go/config"
+	"exchange-go/internal/pkg/logger"
+
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
+	"gorm.io/gorm/utils"
+)
+
+// MasterDB 主库连接（写操作）
+var MasterDB *gorm.DB
+
+// SlaveDBs 从库连接列表（读操作）
+var SlaveDBs []*gorm.DB
+
+// DBConfig 数据库配置
+type DBConfig struct {
+	MasterConfig   *config.DatabaseConfig
+	SlaveConfigs   []*config.DatabaseConfig
+	MaxIdleConns   int
+	MaxOpenConns   int
+	MaxLifetime    time.Duration
+	MaxIdleTime    time.Duration
+	SlowThreshold  time.Duration
+}
+
+// InitWithReadWriteSeparation 初始化读写分离数据库连接
+// 兼容MySQL 5.7和8.0
+func InitWithReadWriteSeparation(cfg *DBConfig) error {
+	// 初始化主库
+	masterDSN := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=%s&parseTime=True&loc=Local&timeout=10s&readTimeout=30s&writeTimeout=30s",
+		cfg.MasterConfig.User,
+		cfg.MasterConfig.Password,
+		cfg.MasterConfig.Host,
+		cfg.MasterConfig.Port,
+		cfg.MasterConfig.DBName,
+		cfg.MasterConfig.Charset,
+	)
+
+	// MySQL 5.7连接配置
+	// 注意：MySQL 5.7不支持一些8.0的特性，连接字符串需要相应调整
+	masterDB, err := gorm.Open(mysql.Open(masterDSN), &gorm.Config{
+		Logger: logger.New(
+			&DBLogger{
+				slowThreshold: cfg.SlowThreshold,
+			},
+			logger.Config{
+				SlowThreshold:             cfg.SlowThreshold,
+				LogLevel:                  logger.Info,
+				IgnoreRecordNotFoundError: true,
+				Colorful:                  true,
+			},
+		),
+		NamingStrategy: schema.NamingStrategy{
+			TablePrefix:   "",
+			SingularTable: false,
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("主库连接失败: %w", err)
+	}
+
+	MasterDB = masterDB
+	logger.Info("数据库主库连接成功")
+
+	// 配置主库连接池
+	sqlDB, err := MasterDB.DB()
+	if err != nil {
+		return fmt.Errorf("获取主库连接失败: %w", err)
+	}
+
+	// MySQL 5.7连接池配置
+	// 注意：SetConnMaxIdleTime在GORM中需要通过sql.DB直接设置
+	sqlDB.SetMaxIdleConns(cfg.MaxIdleConns)
+	sqlDB.SetMaxOpenConns(cfg.MaxOpenConns)
+	sqlDB.SetConnMaxLifetime(cfg.MaxLifetime)
+
+	// 初始化从库
+	for i, slaveConfig := range cfg.SlaveConfigs {
+		slaveDSN := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=%s&parseTime=True&loc=Local&timeout=10s&readTimeout=30s&writeTimeout=30s",
+			slaveConfig.User,
+			slaveConfig.Password,
+			slaveConfig.Host,
+			slaveConfig.Port,
+			slaveConfig.DBName,
+			slaveConfig.Charset,
+		)
+
+		slaveDB, err := gorm.Open(mysql.Open(slaveDSN), &gorm.Config{
+			Logger: logger.New(
+				&DBLogger{
+					slowThreshold: cfg.SlowThreshold,
+				},
+				logger.Config{
+					SlowThreshold:             cfg.SlowThreshold,
+					LogLevel:                  logger.Info,
+					IgnoreRecordNotFoundError: true,
+					Colorful:                  true,
+				},
+			),
+		})
+		if err != nil {
+			logger.Warn(fmt.Sprintf("从库%d连接失败: %v", i+1, err))
+			continue
+		}
+
+		// 配置从库连接池
+		slaveSQLDB, err := slaveDB.DB()
+		if err != nil {
+			logger.Warn(fmt.Sprintf("获取从库%d连接失败: %v", i+1, err))
+			continue
+		}
+
+		slaveSQLDB.SetMaxIdleConns(cfg.MaxIdleConns / 2)
+		slaveSQLDB.SetMaxOpenConns(cfg.MaxOpenConns)
+		slaveSQLDB.SetConnMaxLifetime(cfg.MaxLifetime)
+
+		SlaveDBs = append(SlaveDBs, slaveDB)
+		logger.Info(fmt.Sprintf("数据库从库%d连接成功", i+1))
+	}
+
+	// 如果没有从库，使用主库作为从库
+	if len(SlaveDBs) == 0 {
+		logger.Warn("未配置从库，将使用主库进行读操作")
+		SlaveDBs = append(SlaveDBs, MasterDB)
+	}
+
+	return nil
+}
+
+// GetDB 获取数据库连接
+// 对于写操作（INSERT/UPDATE/DELETE），始终使用主库
+// 对于读操作，根据SQL语句选择从库
+func GetDB(sql string) *gorm.DB {
+	sql = strings.TrimSpace(strings.ToLower(sql))
+
+	// 判断是否为读操作
+	if isReadQuery(sql) {
+		return getSlaveDB()
+	}
+
+	// 写操作使用主库
+	return MasterDB
+}
+
+// isReadQuery 判断是否为读查询
+func isReadQuery(sql string) bool {
+	readPrefixes := []string{
+		"select",
+		"show",
+		"describe",
+		"explain",
+		"desc",
+	}
+
+	for _, prefix := range readPrefixes {
+		if strings.HasPrefix(sql, prefix) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// getSlaveDB 获取从库连接（轮询策略）
+var slaveIndex int
+
+func getSlaveDB() *gorm.DB {
+	if len(SlaveDBs) == 0 {
+		return MasterDB
+	}
+
+	// 简单轮询策略
+	slaveIndex = (slaveIndex + 1) % len(SlaveDBs)
+	return SlaveDBs[slaveIndex]
+}
+
+// GetMasterDB 获取主库连接（用于写操作）
+func GetMasterDB() *gorm.DB {
+	return MasterDB
+}
+
+// GetSlaveDBs 获取所有从库连接
+func GetSlaveDBs() []*gorm.DB {
+	return SlaveDBs
+}
+
+// ReadFromSlave 从从库读取数据
+func ReadFromSlave(sql string, dest ...interface{}) error {
+	db := getSlaveDB()
+	return db.Raw(sql).Scan(dest...).Error
+}
+
+// WriteToMaster 写入主库
+func WriteToMaster(sql string, dest ...interface{}) error {
+	return MasterDB.Raw(sql).Scan(dest...).Error
+}
+
+// Transaction 事务操作（始终在主库上执行）
+func Transaction(fn func(tx *gorm.DB) error) error {
+	return MasterDB.Transaction(fn)
+}
+
+// DBLogger 数据库日志记录器
+type DBLogger struct {
+	slowThreshold time.Duration
+}
+
+// Print 实现gorm.Logger接口
+func (l *DBLogger) Print(values ...interface{}) {
+	if len(values) > 3 {
+		// 判断是否为慢查询
+		if duration, ok := values[3].(time.Duration); ok {
+			if duration > l.slowThreshold {
+				sql := values[3]
+				logger.Warn(fmt.Sprintf("慢查询检测: %s (耗时: %v)", sql, duration))
+			}
+		}
+
+		// 记录SQL日志
+		if sql, ok := values[3].(string); ok {
+			if !strings.HasPrefix(sql, "SELECT") {
+				logger.Debug(fmt.Sprintf("SQL执行: %s | 参数: %v", sql, values[4]))
+			}
+		}
+	}
+}
+
+// HealthCheck 数据库健康检查
+type DBHealthStatus struct {
+	MasterStatus  string            `json:"master_status"`
+	MasterLatency time.Duration     `json:"master_latency"`
+	SlaveCount    int               `json:"slave_count"`
+	SlaveStatus   map[int]string    `json:"slave_status"`
+	SlaveLatency  map[int]time.Duration `json:"slave_latency"`
+}
+
+// HealthCheck 执行数据库健康检查
+func HealthCheck() (*DBHealthStatus, error) {
+	status := &DBHealthStatus{
+		SlaveStatus:  make(map[int]string),
+		SlaveLatency: make(map[int]time.Duration),
+	}
+
+	// 检查主库
+	start := time.Now()
+	var result int
+	err := MasterDB.Raw("SELECT 1").Scan(&result).Error
+	if err != nil {
+		status.MasterStatus = "unhealthy"
+	} else {
+		status.MasterStatus = "healthy"
+	}
+	status.MasterLatency = time.Since(start)
+
+	// 检查从库
+	status.SlaveCount = len(SlaveDBs)
+	for i, slaveDB := range SlaveDBs {
+		start := time.Now()
+		var slaveResult int
+		err := slaveDB.Raw("SELECT 1").Scan(&slaveResult).Error
+		if err != nil {
+			status.SlaveStatus[i] = "unhealthy"
+		} else {
+			status.SlaveStatus[i] = "healthy"
+		}
+		status.SlaveLatency[i] = time.Since(start)
+	}
+
+	return status, nil
+}
+
+// Close 关闭所有数据库连接
+func Close() error {
+	if MasterDB != nil {
+		sqlDB, err := MasterDB.DB()
+		if err == nil {
+			sqlDB.Close()
+		}
+	}
+
+	for _, slaveDB := range SlaveDBs {
+		if slaveDB != nil {
+			sqlDB, err := slaveDB.DB()
+			if err == nil {
+				sqlDB.Close()
+			}
+		}
+	}
+
+	return nil
+}
+
+// AutoMigrate 自动迁移数据库表结构
+// 注意：MySQL 5.7中不支持JSON字段类型
+func AutoMigrate(dst ...interface{}) error {
+	return MasterDB.AutoMigrate(dst...)
+}
+
+// Raw 原生SQL查询
+func Raw(sql string, values ...interface{}) *gorm.DB {
+	return MasterDB.Raw(sql, values...)
+}
+
+// Table 指定表名
+func Table(name string) *gorm.DB {
+	return MasterDB.Table(name)
+}
+
+// Where 条件查询
+func Where(query interface{}, args ...interface{}) *gorm.DB {
+	return MasterDB.Where(query, args...)
+}
+
+// Order 排序
+func Order(expr interface{}) *gorm.DB {
+	return MasterDB.Order(expr)
+}
+
+// Limit 限制数量
+func Limit(n int) *gorm.DB {
+	return MasterDB.Limit(n)
+}
+
+// Offset 偏移量
+func Offset(n int) *gorm.DB {
+	return MasterDB.Offset(n)
+}
+
+// Create 创建记录
+func Create(value interface{}) *gorm.DB {
+	return MasterDB.Create(value)
+}
+
+// Save 保存记录
+func Save(value interface{}) *gorm.DB {
+	return MasterDB.Save(value)
+}
+
+// Updates 更新记录
+func Updates(values interface{}) *gorm.DB {
+	return MasterDB.Updates(values)
+}
+
+// Update 更新单个字段
+func Update(column string, value interface{}) *gorm.DB {
+	return MasterDB.Update(column, value)
+}
+
+// Delete 删除记录
+func Delete(value interface{}) *gorm.DB {
+	return MasterDB.Delete(value)
+}
+
+// Find 查询记录
+func Find(dest interface{}, conditions ...interface{}) *gorm.DB {
+	return MasterDB.Find(dest, conditions...)
+}
+
+// First 获取第一条记录
+func First(dest interface{}, conditions ...interface{}) *gorm.DB {
+	return MasterDB.First(dest, conditions...)
+}
+
+// Last 获取最后一条记录
+func Last(dest interface{}, conditions ...interface{}) *gorm.DB {
+	return MasterDB.Last(dest, conditions...)
+}
+
+// Count 统计数量
+func Count(count *int64) *gorm.DB {
+	return MasterDB.Count(count)
+}
+
+// Pluck 查询单个列
+func Pluck(column string, dest interface{}) *gorm.DB {
+	return MasterDB.Pluck(column, dest)
+}
+
+// Scan 扫描到结构体
+func Scan(dest interface{}) *gorm.DB {
+	return MasterDB.Scan(dest)
+}
+
+// Group 分组
+func Group(expr string) *gorm.DB {
+	return MasterDB.Group(expr)
+}
+
+// Having 分组条件
+func Having(query interface{}, args ...interface{}) *gorm.DB {
+	return MasterDB.Having(query, args...)
+}
+
+// Joins 连表查询
+func Joins(query string, args ...interface{}) *gorm.DB {
+	return MasterDB.Joins(query, args...)
+}
+
+// Preload 预加载关联
+func Preload(column string, condition ...interface{}) *gorm.DB {
+	return MasterDB.Preload(column, condition...)
+}
+
+// TransactionWithReadWrite 事务中读写分离
+// 注意：事务中所有操作都在主库上执行
+func TransactionWithReadWrite(fn func(tx *gorm.DB) error) error {
+	return MasterDB.Transaction(fn)
+}

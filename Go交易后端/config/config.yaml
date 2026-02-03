@@ -1,0 +1,48 @@
+# Exchange Go 配置文件
+
+app:
+  name: "exchange-go"
+  mode: "debug"  # debug, release, test - debug模式显示所有日志
+  port: 8080
+  jwt_secret: "your-jwt-secret-key-change-in-production"
+  jwt_expire: 86400  # 24小时
+
+# MySQL 数据库配置
+database:
+  host: "127.0.0.1"
+  port: 3306
+  user: "root"
+  password: "root123"
+  dbname: "bibi2022"
+  charset: "utf8"  # 使用 utf8 避免 MySQL 5.6 索引长度限制
+  max_idle_conns: 10
+  max_open_conns: 100
+
+# Redis 配置
+redis:
+  host: "127.0.0.1"
+  port: 6379
+  password: ""
+  db: 0
+  pool_size: 100
+
+# 日志配置
+log:
+  level: "error"  # debug, info, warn, error - 只显示错误日志
+  filename: "logs/app.log"
+  max_size: 100    # MB
+  max_backups: 30
+  max_age: 7       # 天
+  compress: true
+
+# WebSocket 配置
+websocket:
+  port: 8081
+  read_buffer_size: 1024
+  write_buffer_size: 1024
+  heartbeat_interval: 30  # 秒
+
+# 第三方 API
+huobi:
+  api_url: "https://api.huobi.pro"
+  ws_url: "wss://api.huobi.pro/ws"

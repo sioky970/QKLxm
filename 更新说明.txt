@@ -1,0 +1,82 @@
+混合架构版本 - 更新说明
+
+更新时间: 2026-01-24
+版本: v1.0.1
+
+变更内容：
+=========
+
+1. 删除了前端源码目录
+   - 已删除: 3-手机前端/
+   - 已删除: 4-电脑前端/
+   - 原因: 需要重新开发前端系统
+
+2. 保留的目录
+   - ✅ 1-Go交易后端/          (Go语言交易API)
+   - ✅ 2-PHP管理后台/         (PHP管理系统)
+   - ✅ 5-数据库脚本/          (MySQL初始化脚本)
+   - ✅ 6-部署文档/            (完整文档)
+
+3. 更新的文档
+   - ✅ 目录说明.md - 已更新，移除前端相关说明
+   - ✅ 章节编号已调整 (5️⃣→3️⃣, 6️⃣→4️⃣)
+
+4. Go后端API
+   - 38个接口端点
+   - Swagger文档: http://localhost:8080/swagger/index.html
+   - JWT认证支持
+   - WebSocket支持
+
+5. PHP管理后台
+   - 完整的管理界面
+   - 用户管理、财务审核、风控设置
+   - 数据统计报表
+   - 访问地址: http://localhost:8000/admin
+
+6. 数据库
+   - 数据库名: bibi2022
+   - 约60张数据表
+   - 完整SQL脚本
+
+下一步计划：
+===========
+
+需要重新开发前端系统，包括：
+1. 手机端前端 (iOS/Android)
+2. 电脑端前端 (桌面浏览器)
+
+前端需要对接的API：
+- Go交易后端: http://localhost:8080/api
+- 38个REST API接口
+- WebSocket实时推送
+- JWT Token认证
+
+建议的前端技术栈：
+- 框架: React / Vue 3 / Next.js
+- UI库: Ant Design / Element Plus / Tailwind CSS
+- 状态管理: Redux / Pinia / Zustand
+- 构建工具: Vite / Webpack
+- 图表库: TradingView / ECharts
+- 移动端: React Native / Flutter / UniApp
+
+注意事项：
+=========
+
+1. Go后端已包含完整API，可直接使用
+2. PHP后台已清理后门，安全可用
+3. 数据库结构完整，无需修改
+4. 前端开发时参考Swagger文档
+5. 使用JWT Token进行身份认证
+
+技术支持：
+=========
+
+文档位置: 混合架构版本/6-部署文档/
+- README.md - 完整部署指南
+- 安全分析报告.md - 后门分析
+- 快速启动指南.md - 5分钟部署
+
+联系方式：
+- Swagger API文档: http://localhost:8080/swagger/index.html
+- Go后端健康检查: http://localhost:8080/health
+
