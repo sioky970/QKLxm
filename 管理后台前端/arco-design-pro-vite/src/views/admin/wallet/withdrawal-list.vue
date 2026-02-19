@@ -143,23 +143,33 @@
         <template #address="{ record }">
           <!-- 区块链提币 -->
           <template v-if="record.withdraw_type === 2">
-            <a-tooltip :content="record.chain_address">
+            <a-tooltip :content="record.chain_address || '暂无地址'">
               <span class="address-text chain-address">
                 {{ formatAddress(record.chain_address) }}
               </span>
             </a-tooltip>
-            <a-button type="text" size="mini" @click="copyText(record.chain_address)">
+            <a-button 
+              type="text" 
+              size="mini" 
+              @click="copyText(record.chain_address)"
+              :disabled="!record.chain_address"
+            >
               <template #icon><icon-copy /></template>
             </a-button>
           </template>
           <!-- 银行转账 -->
           <template v-else>
-            <a-tooltip :content="record.address">
+            <a-tooltip :content="record.address || '暂无地址'">
               <span class="address-text">
                 {{ formatAddress(record.address) }}
               </span>
             </a-tooltip>
-            <a-button type="text" size="mini" @click="copyText(record.address)">
+            <a-button 
+              type="text" 
+              size="mini" 
+              @click="copyText(record.address)"
+              :disabled="!record.address"
+            >
               <template #icon><icon-copy /></template>
             </a-button>
           </template>
@@ -596,7 +606,6 @@
     { title: 'ID', dataIndex: 'id', width: 80 },
     { title: '用户', slotName: 'user', width: 150 },
     { title: '币种', slotName: 'currency', width: 100 },
-    { title: '提现类型', slotName: 'withdraw_type', width: 120 },
     { title: '提现金额', slotName: 'amount', width: 160 },
     { title: '提现地址', slotName: 'address', width: 220 },
     { title: '状态', slotName: 'status', width: 100 },

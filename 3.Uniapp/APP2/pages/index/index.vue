@@ -291,6 +291,9 @@ const checkLoginStatus = () => {
 		uni.redirectTo({
 			url: '/pages/login/login'
 		})
+	} else {
+		// 已登录，初始化市场数据（首次进入APP时加载交易对列表）
+		marketStore.initialize()
 	}
 }
 

@@ -30,7 +30,7 @@ type KYCSubmitRequest struct {
 	FrontPic   string `json:"front_pic" binding:"required"`
 	ReversePic string `json:"reverse_pic" binding:"required"`
 	HandPic    string `json:"hand_pic"`
-	BankPic    string `json:"bank_pic" binding:"required"`
+	BankPic    string `json:"bank_pic"`
 }
 
 // KYCStatusResponse 实名认证状态响应

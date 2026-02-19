@@ -324,6 +324,18 @@ const isFormValid = computed(() => {
 		const passwordMatch = password === confirmPassword && confirmPassword.length > 0
 		// 如果邀请码必填，则需要验证邀请码
 		const inviteValid = !inviteCodeRequired.value || inviteCode.length > 0
+		
+		// 调试日志
+		console.log('邮箱表单验证:', {
+			emailValid,
+			passwordValid,
+			passwordMatch,
+			inviteValid,
+			email,
+			passwordLength: password.length,
+			confirmPasswordLength: confirmPassword.length
+		})
+		
 		return emailValid && passwordValid && passwordMatch && inviteValid
 	} else {
 		const { phone, password, confirmPassword, inviteCode } = phoneForm.value
@@ -332,6 +344,20 @@ const isFormValid = computed(() => {
 		const passwordMatch = password === confirmPassword && confirmPassword.length > 0
 		// 如果邀请码必填，则需要验证邀请码
 		const inviteValid = !inviteCodeRequired.value || inviteCode.length > 0
+		
+		// 调试日志
+		console.log('手机表单验证:', {
+			phoneValid,
+			passwordValid,
+			passwordMatch,
+			inviteValid,
+			phone,
+			passwordLength: password.length,
+			confirmPasswordLength: confirmPassword.length,
+			inviteCodeRequired: inviteCodeRequired.value,
+			inviteCodeLength: inviteCode.length
+		})
+		
 		return phoneValid && passwordValid && passwordMatch && inviteValid
 	}
 })

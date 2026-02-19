@@ -52,9 +52,6 @@
 						<!-- 资金账户 -->
 						<view class="wallet-balance-item" @tap="navigateToTransfer('fund')">
 							<view class="wallet-balance-left">
-								<view class="wallet-icon-small fund-icon">
-									<SvgIcon name="wallet" :size="16" color="#fff" />
-								</view>
 								<text class="wallet-balance-name">资金账户</text>
 							</view>
 							<view class="wallet-balance-right">
@@ -64,9 +61,6 @@
 						</view>
 						<view class="wallet-balance-item" @tap="navigateToTransfer('spot')">
 							<view class="wallet-balance-left">
-								<view class="wallet-icon-small spot-icon">
-									<SvgIcon name="wallet" :size="16" color="#fff" />
-								</view>
 								<text class="wallet-balance-name">现货账户</text>
 							</view>
 							<view class="wallet-balance-right">
@@ -76,9 +70,6 @@
 						</view>
 						<view class="wallet-balance-item" @tap="navigateToTransfer('contract')">
 							<view class="wallet-balance-left">
-								<view class="wallet-icon-small contract-icon">
-									<SvgIcon name="chart" :size="16" color="#fff" />
-								</view>
 								<text class="wallet-balance-name">永续合约账户</text>
 							</view>
 							<view class="wallet-balance-right">
@@ -88,9 +79,6 @@
 						</view>
 						<view class="wallet-balance-item" @tap="navigateToTransfer('delivery')">
 							<view class="wallet-balance-left">
-								<view class="wallet-icon-small delivery-icon">
-									<SvgIcon name="position" :size="16" color="#fff" />
-								</view>
 								<text class="wallet-balance-name">交割合约账户</text>
 							</view>
 							<view class="wallet-balance-right">
@@ -127,8 +115,8 @@
 			<text class="section-title">我的资产</text>
 		</view>
 
-		<view class="scroll-container">
-			<scroll-view scroll-y class="content-scroll">
+		<view class="crypto-list-container">
+			<scroll-view scroll-y class="crypto-scroll">
 
 				<!-- 加密货币资产列表 -->
 				<view class="crypto-list">
@@ -144,7 +132,6 @@
 							<view class="amount-line">
 								<text class="crypto-amount">{{ isAssetsVisible ? item.balance : '****' }}</text>
 							</view>
-							<text class="crypto-usd">≈ ${{ isAssetsVisible ? item.usdValue : '****' }}</text>
 						</view>
 					</view>
 				</view>
@@ -191,8 +178,7 @@ const cryptoAssets = computed(() => {
 			id: asset.id,
 			name: asset.name,
 			symbol: asset.symbol,
-			balance: formatBalanceWith9Digits(asset.balance),
-			usdValue: formatBalanceWith9Digits(asset.usdValue)
+			balance: formatBalanceWith9Digits(asset.balance)
 		}))
 })
 const isLoading = computed(() => walletStore.state.isLoading)
@@ -258,6 +244,9 @@ const handleLogout = () => {
 				uni.removeStorageSync('isLoggedIn')
 				uni.removeStorageSync('userInfo')
 				uni.removeStorageSync('token')
+				
+				// 清除钱包状态数据（重要！）
+				walletStore.reset()
 				
 				uni.showToast({
 					title: '已退出登录',
@@ -556,6 +545,19 @@ const navigateToTransfer = (walletType) => {
 	}
 }
 
+/* 加密货币列表容器 - 固定高度 */
+.crypto-list-container {
+	flex: 1;
+	min-height: 0;
+	background: #ffffff;
+}
+
+/* 加密货币列表滚动区域 */
+.crypto-scroll {
+	height: 100%;
+	background: #ffffff;
+}
+
 /* 加密货币列表 */
 .crypto-list {
 	padding: 20rpx 30rpx 30rpx;
@@ -625,13 +627,6 @@ const navigateToTransfer = (walletType) => {
 					line-height: 1.2;
 				}
 			}
-			
-			.crypto-usd {
-				font-size: 24rpx;
-				color: #8c8c8c;
-				font-weight: 400;
-				letter-spacing: 0.3rpx;
-			}
 		}
 		
 		&:last-child {
@@ -684,31 +679,6 @@ const navigateToTransfer = (walletType) => {
 	display: flex;
 	align-items: center;
 	gap: 16rpx;
-}
-
-.wallet-icon-small {
-	width: 48rpx;
-	height: 48rpx;
-	border-radius: 12rpx;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-}
-
-.spot-icon {
-	background: linear-gradient(135deg, #007AFF 0%, #00C6FF 100%);
-}
-
-.contract-icon {
-	background: linear-gradient(135deg, #FF9500 0%, #FFB800 100%);
-}
-
-.delivery-icon {
-	background: linear-gradient(135deg, #9C27B0 0%, #E040FB 100%);
-}
-
-.fund-icon {
-	background: linear-gradient(135deg, #00C853 0%, #69F0AE 100%);
 }
 
 .wallet-balance-name {

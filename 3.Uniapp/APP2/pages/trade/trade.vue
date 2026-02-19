@@ -344,11 +344,14 @@ const orderType = ref('market') // 'market' or 'limit'
 const amount = ref('')
 const limitPrice = ref('')
 const activeBottomTab = ref('pending') // pending, assets
+const tradeType = ref('spot') // 当前交易类型：spot(现货), contract(永续合约), delivery(交割合约)
 
 // 用户资产数据（从wallet store获取）
 const userAssets = computed(() => walletStore.state.assets)
 const usdtBalance = computed(() => walletStore.state.usdtBalance)
 const spotBalance = computed(() => walletStore.state.spotBalance)
+const contractBalance = computed(() => walletStore.state.contractBalance)
+const deliveryBalance = computed(() => walletStore.state.deliveryBalance)
 const currentCoinBalance = computed(() => {
 	const coinName = currentCoinName.value
 	const coinAsset = walletStore.state.assets.find(asset => asset.name === coinName)
@@ -532,9 +535,20 @@ const estimatedFee = computed(() => {
 	return fee.toFixed(6)
 })
 
-// 可用余额（显示现货账户余额）
+// 可用余额（根据当前交易类型显示对应账户余额）
 const availableBalance = computed(() => {
-	// 统一显示现货账户总余额
+	// 根据交易类型返回对应余额
+	if (tradeType.value === 'spot') {
+		// 现货交易：显示现货账户余额
+		return spotBalance.value.toFixed(4)
+	} else if (tradeType.value === 'contract') {
+		// 永续合约交易：显示永续合约账户余额
+		return contractBalance.value.toFixed(4)
+	} else if (tradeType.value === 'delivery') {
+		// 交割合约交易：显示交割合约账户余额
+		return deliveryBalance.value.toFixed(4)
+	}
+	// 默认返回现货余额
 	return spotBalance.value.toFixed(4)
 })
 
@@ -812,8 +826,8 @@ const calculateAmountBySlider = (percent) => {
 	const price = parseFloat(currentPrice.value) || 0
 	
 	if (tradeSide.value === 'buy') {
-		// 买入：使用USDT余额的百分比
-		const maxUsdt = usdtBalance.value
+		// 买入：使用当前交易类型的可用余额的百分比（而不是usdtBalance）
+		const maxUsdt = parseFloat(availableBalance.value) || 0
 		if (percent === 100) {
 			if (orderType.value === 'market') {
 				amount.value = floorFixed(maxUsdt, 2)

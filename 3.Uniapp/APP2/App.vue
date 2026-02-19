@@ -9,9 +9,20 @@ export default {
 		
 		// 全局初始化WebSocket连接
 		const isLoggedIn = uni.getStorageSync('isLoggedIn')
-		console.log('[App] 登录状态:', isLoggedIn)
+		const token = uni.getStorageSync('token')
+		console.log('[App] 登录状态:', isLoggedIn, 'Token存在:', !!token)
 		
-		if (isLoggedIn) {
+		// 检查token和登录状态是否一致
+		if (isLoggedIn && !token) {
+			// 登录状态为true但没有token，清除登录状态
+			console.warn('[App] 登录状态异常：isLoggedIn=true但token不存在，清除登录状态')
+			uni.removeStorageSync('isLoggedIn')
+			uni.removeStorageSync('userInfo')
+			walletStore.reset()
+			return
+		}
+		
+		if (isLoggedIn && token) {
 			console.log('[App] 开始连接WebSocket...')
 			wsClient.connect()
 			marketStore.initialize()
@@ -28,7 +39,9 @@ export default {
 		console.log('[App] Show')
 		
 		const isLoggedIn = uni.getStorageSync('isLoggedIn')
-		if (isLoggedIn) {
+		const token = uni.getStorageSync('token')
+		
+		if (isLoggedIn && token) {
 			// WebSocket 断线重连
 			if (!wsClient.isConnected) {
 				console.log('[App] WebSocket 未连接，启动重连')
@@ -55,6 +68,12 @@ export default {
 					walletStore.fetchAssetData()
 				}
 			}
+		} else if (isLoggedIn && !token) {
+			// 登录状态为true但没有token，清除登录状态
+			console.warn('[App] 登录状态异常：isLoggedIn=true但token不存在，清除登录状态')
+			uni.removeStorageSync('isLoggedIn')
+			uni.removeStorageSync('userInfo')
+			walletStore.reset()
 		}
 	},
 	onHide: function() {

@@ -220,27 +220,12 @@ func (s *AuthService) ChangePassword(adminID uint, oldPassword, newPassword stri
 	return database.DB.Model(&admin).Update("password", s.HashPassword(newPassword)).Error
 }
 
-// HashPassword  (PHPUsers::MakePassword?
+// HashPassword 统一的加密方式
 func (s *AuthService) HashPassword(password string) string {
-	// PHP?
-	// $salt = 'ABCDEFG';
-	// $passwordChars = str_split($password);
-	// foreach ($passwordChars as $char) {
-	//     $salt .= md5($char);
-	// }
-	// return md5($salt);
-	
-	salt := "ABCDEFG"
-	
-	// MD5?
-	for _, char := range password {
-		charHash := md5.Sum([]byte(string(char)))
-		salt += hex.EncodeToString(charHash[:])
-	}
-	
-	// saltMD5
-	finalHash := md5.Sum([]byte(salt))
-	return hex.EncodeToString(finalHash[:])
+	// 使用 Go 标准的 MD5 加密方式
+	hasher := md5.New()
+	hasher.Write([]byte(password))
+	return hex.EncodeToString(hasher.Sum(nil))
 }
 
 // Logout ?()

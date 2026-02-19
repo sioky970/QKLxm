@@ -64,6 +64,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { login as apiLogin, getUserInfo } from '@/utils/api.js'
+import walletStore from '@/stores/walletStore.js'
 
 const statusBarHeight = ref(0)
 const account = ref('')
@@ -102,6 +103,9 @@ const checkLoginStatus = async () => {
 			uni.removeStorageSync('token')
 			uni.removeStorageSync('isLoggedIn')
 			uni.removeStorageSync('userInfo')
+			
+			// 清除钱包状态数据（重要！）
+			walletStore.reset()
 		}
 	}
 	

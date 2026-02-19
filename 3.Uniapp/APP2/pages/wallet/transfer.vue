@@ -22,9 +22,6 @@
 							<picker @change="onFromChange" :value="fromIndex" :range="wallets" range-key="name" class="account-picker">
 								<view class="picker-content">
 									<view class="account-brief">
-										<view class="account-icon" :style="{ background: wallets[fromIndex].color }">
-											<SvgIcon :name="wallets[fromIndex].icon" :size="18" color="#fff" />
-										</view>
 										<text class="account-name">{{ wallets[fromIndex].name }}</text>
 									</view>
 									<SvgIcon name="arrow-down" :size="16" color="#999" />
@@ -46,9 +43,6 @@
 							<picker @change="onToChange" :value="toIndex" :range="wallets" range-key="name" class="account-picker">
 								<view class="picker-content">
 									<view class="account-brief">
-										<view class="account-icon" :style="{ background: wallets[toIndex].color }">
-											<SvgIcon :name="wallets[toIndex].icon" :size="18" color="#fff" />
-										</view>
 										<text class="account-name">{{ wallets[toIndex].name }}</text>
 									</view>
 									<SvgIcon name="arrow-down" :size="16" color="#999" />
@@ -551,16 +545,6 @@ onMounted(() => {
 					.account-brief {
 						display: flex;
 						align-items: center;
-						gap: 16rpx;
-
-						.account-icon {
-							width: 48rpx;
-							height: 48rpx;
-							border-radius: 50%;
-							display: flex;
-							align-items: center;
-							justify-content: center;
-						}
 
 						.account-name {
 							font-size: 30rpx;

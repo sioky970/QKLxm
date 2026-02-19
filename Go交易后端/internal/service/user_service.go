@@ -93,11 +93,29 @@ func (s *UserService) Register(req *RegisterRequest) error {
 		}
 	}
 
-	// 检查用户是否已存在
+	// 检查用户是否已存在（account_number 必须唯一）
 	var existUser model.User
-	result := database.DB.Where("account_number = ? AND area_code_id = ?", req.UserString, req.CountryCode).First(&existUser)
+	result := database.DB.Where("account_number = ?", req.UserString).First(&existUser)
 	if result.RowsAffected > 0 {
 		return errors.New("账号已存在")
+	}
+
+	// 如果是手机号，检查手机号是否已被使用
+	if req.Type == "mobile" {
+		var existPhoneUser model.User
+		result := database.DB.Where("phone = ?", req.UserString).First(&existPhoneUser)
+		if result.RowsAffected > 0 {
+			return errors.New("手机号已被使用")
+		}
+	}
+
+	// 如果是邮箱，检查邮箱是否已被使用
+	if req.Type == "email" {
+		var existEmailUser model.User
+		result := database.DB.Where("email = ?", req.UserString).First(&existEmailUser)
+		if result.RowsAffected > 0 {
+			return errors.New("邮箱已被使用")
+		}
 	}
 
 	// 处理邀请码 (测试模式: 使用 "000000" 验证码时可跳过邀请码)
@@ -133,10 +151,10 @@ func (s *UserService) Register(req *RegisterRequest) error {
 
 	if req.Type == "mobile" {
 		user.Phone = req.UserString
-		user.Email = req.UserString
+		user.Email = ""
 	} else {
 		user.Email = req.UserString
-		user.Phone = req.UserString
+		user.Phone = ""
 	}
 
 	// 使用事务创建用户和钱包

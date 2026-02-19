@@ -18,127 +18,66 @@
 			<!-- 账户余额卡片 -->
 			<view class="balance-card">
 				<view class="balance-header">
-					<text class="balance-title">可用余额</text>
-					<view class="balance-badge">USDT</view>
-				</view>
-				<view class="balance-amount">
+				<text class="balance-title">可用余额</text>
+				<view class="balance-badge">USDT</view>
+			</view>
+			<view class="balance-amount">
 					<text class="amount-integer">{{ formatBalanceInteger(balance) }}</text>
 					<text class="amount-decimal">.{{ formatBalanceDecimal(balance) }}</text>
 				</view>
 				<view class="balance-footer">
-					<text class="balance-hint">可提现金额</text>
+					<text class="balance-hint">仅资金钱包余额可提现</text>
+				</view>
+				<view class="balance-tip">
+					<text class="tip-icon">💡</text>
+					<text class="tip-text">请先将其他钱包余额划转至资金钱包后再进行提现</text>
 				</view>
 			</view>
 
-			<!-- 提现方式选择 -->
-			<view class="method-section" v-if="showBankOption && showCryptoOption">
-				<text class="section-label">选择提现方式</text>
-				<view class="method-tabs">
+			<!-- 网络选择 - 两行网格布局 -->
+			<view class="form-card">
+				<view class="form-header">
+					<text class="form-title">选择网络</text>
+				</view>
+				<view class="network-grid">
 					<view 
-						class="method-tab" 
-						:class="{ active: withdrawType === 1 }"
-						@click="switchWithdrawType(1)"
+						v-for="net in availableNetworks" 
+						:key="net.name"
+						class="network-tag"
+						:class="{ active: selectedNetwork === net.name }"
+						@click="selectNetwork(net.name)"
 					>
-						<text class="tab-icon">🏦</text>
-						<text class="tab-name">银行转账</text>
-					</view>
-					<view 
-						class="method-tab" 
-						:class="{ active: withdrawType === 2 }"
-						@click="switchWithdrawType(2)"
-					>
-						<text class="tab-icon">⛓️</text>
-						<text class="tab-name">链上提币</text>
+						<text class="tag-name">{{ net.name }}</text>
 					</view>
 				</view>
 			</view>
 
-			<!-- 银行转账模式 -->
-			<template v-if="withdrawType === 1">
-				<!-- 未完成KYC警告 -->
-				<view class="alert-card" v-if="!isKYCVerified">
-					<view class="alert-icon">⚠️</view>
-					<view class="alert-content">
-						<text class="alert-title">需要实名认证</text>
-						<text class="alert-text">请先完成实名认证后再进行银行提现</text>
-					</view>
-					<button class="alert-btn" @click="goToKYC">去认证</button>
+			<!-- 钱包地址输入 -->
+			<view class="form-card">
+				<view class="form-header">
+					<text class="form-title">收款地址</text>
 				</view>
-
-				<!-- 未绑定银行卡警告 -->
-				<view class="alert-card" v-if="isKYCVerified && !hasBankCard">
-					<view class="alert-icon">💳</view>
-					<view class="alert-content">
-						<text class="alert-title">需要绑定银行卡</text>
-						<text class="alert-text">请先绑定收款银行卡</text>
-					</view>
-					<button class="alert-btn" @click="goToBankCard">去绑定</button>
+				<view class="address-box" :class="{ error: chainAddressError, focus: addressFocused }">
+					<input 
+						class="address-input" 
+						type="text"
+						v-model="chainAddress" 
+						:placeholder="addressPlaceholder"
+						placeholder-class="input-placeholder"
+						@input="onChainAddressInput"
+						@focus="addressFocused = true"
+						@blur="addressFocused = false"
+					/>
+					<view class="input-clear" v-if="chainAddress" @click="clearAddress">×</view>
 				</view>
-
-				<!-- 收款账户信息 -->
-				<view class="info-card" v-if="isKYCVerified && hasBankCard && bankInfo">
-					<view class="info-header">
-						<text class="info-title">收款账户</text>
-						<text class="info-status">已认证</text>
-					</view>
-					<view class="bank-info">
-						<view class="bank-icon-wrap">🏦</view>
-						<view class="bank-detail">
-							<text class="bank-name">{{ bankInfo.bank_name }}</text>
-							<text class="bank-number">{{ formatBankCard(bankInfo.bank_account) }}</text>
-							<text class="bank-holder">{{ bankInfo.real_name }}</text>
-						</view>
-					</view>
+				<view class="address-tip">
+					<text class="tip-error" v-if="chainAddressError">{{ chainAddressError }}</text>
+					<text class="tip-warn" v-else>⚠️ 请仔细核对地址，转错无法找回</text>
 				</view>
-			</template>
-
-			<!-- 区块链提币模式 -->
-			<template v-if="withdrawType === 2">
-				<!-- 网络选择 - 两行网格布局 -->
-				<view class="form-card">
-					<view class="form-header">
-						<text class="form-title">选择网络</text>
-					</view>
-					<view class="network-grid">
-						<view 
-							v-for="net in withdrawConfig.networks" 
-							:key="net.name"
-							class="network-tag"
-							:class="{ active: selectedNetwork === net.name }"
-							@click="selectNetwork(net.name)"
-						>
-							<text class="tag-name">{{ net.name }}</text>
-						</view>
-					</view>
-				</view>
-
-				<!-- 钱包地址输入 -->
-				<view class="form-card">
-					<view class="form-header">
-						<text class="form-title">收款地址</text>
-					</view>
-					<view class="address-box" :class="{ error: chainAddressError, focus: addressFocused }">
-						<input 
-							class="address-input" 
-							type="text"
-							v-model="chainAddress" 
-							:placeholder="addressPlaceholder"
-							placeholder-class="input-placeholder"
-							@input="onChainAddressInput"
-							@focus="addressFocused = true"
-							@blur="addressFocused = false"
-						/>
-						<view class="input-clear" v-if="chainAddress" @click="clearAddress">×</view>
-					</view>
-					<view class="address-tip">
-						<text class="tip-error" v-if="chainAddressError">{{ chainAddressError }}</text>
-						<text class="tip-warn" v-else>⚠️ 请仔细核对地址，转错无法找回</text>
-					</view>
-				</view>
-			</template>
+			</view>
 
 			<!-- 提现金额输入 -->
-			<view class="form-card" v-if="canWithdraw">
+			<view class="form-card">
 				<view class="form-header">
 					<text class="form-title">提现金额</text>
 					<text class="form-max" @click="setMaxAmount">全部提现</text>
@@ -175,7 +114,7 @@
 			</view>
 
 			<!-- 支付密码 -->
-			<view class="form-card" v-if="canWithdraw">
+			<view class="form-card">
 				<view class="form-header">
 					<text class="form-title">安全验证</text>
 				</view>
@@ -238,19 +177,12 @@
 			</view>
 
 			<!-- 温馨提示 -->
-			<view class="notice-card" v-if="canWithdraw">
+			<view class="notice-card">
 				<view class="notice-header">
 					<text class="notice-icon">📋</text>
 					<text class="notice-title">温馨提示</text>
 				</view>
-				<view class="notice-list" v-if="withdrawType === 1">
-					<text class="notice-item">• 提现将转账至您绑定的银行卡</text>
-					<text class="notice-item">• 提现申请提交后将进入人工审核</text>
-					<text class="notice-item">• 审核通过后1-3个工作日内到账</text>
-					<text class="notice-item">• 提现期间资金将被冻结，审核拒绝后自动退回</text>
-					<text class="notice-item">• 如有疑问，请联系在线客服</text>
-				</view>
-				<view class="notice-list" v-else>
+				<view class="notice-list">
 					<text class="notice-item">• 请仔细核对钱包地址，转错将无法找回</text>
 					<text class="notice-item">• 提现申请提交后将进入人工审核</text>
 					<text class="notice-item">• 审核通过后将在24小时内完成链上转账</text>
@@ -264,7 +196,7 @@
 		</scroll-view>
 
 		<!-- 底部提交按钮 -->
-		<view class="submit-bar" v-if="canWithdraw">
+		<view class="submit-bar">
 			<button 
 				class="submit-btn" 
 				:class="{ disabled: !canSubmit }"
@@ -282,6 +214,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { request } from '@/utils/api.js'
 import SvgIcon from '@/components/SvgIcon.vue'
+import walletStore from '@/stores/walletStore.js'
 
 // ==================== 状态定义 ====================
 const statusBarHeight = ref(0)
@@ -289,30 +222,25 @@ const navHeight = ref(88)
 const loading = ref(false)
 const submitting = ref(false)
 
-// 余额与费率
-const balance = ref(0)
+// 余额与费率 - 使用资金钱包余额作为可提现余额
+const balance = computed(() => walletStore.state.fundBalance || 0)
 const minWithdraw = ref(10)
 const feeRate = ref(0.001)
 
-// KYC状态
-const isKYCVerified = ref(false)
-const kycInfo = ref(null)
-
-// 银行卡状态
-const hasBankCard = ref(false)
-const bankInfo = ref(null)
-
 // 提现配置
 const withdrawConfig = ref({
-	withdraw_mode: 'bank',
 	networks: [],
 	crypto_fee: 1,
-	usdt_currency_id: 3  // 默认值，会从后端获取
+	usdt_currency_id: 3
 })
 const configLoaded = ref(false)
 
-// 提现类型 1=银行转账, 2=区块链提币
-const withdrawType = ref(1)
+// 可用网络列表（只保留TRC20和ERC20）
+const availableNetworks = computed(() => {
+	return withdrawConfig.value.networks.filter(net => 
+		net.name === 'TRC20' || net.name === 'ERC20'
+	)
+})
 
 // 区块链相关
 const selectedNetwork = ref('')
@@ -345,30 +273,14 @@ const realAmount = computed(() => {
 	return Math.max(0, amt - fee.value)
 })
 
-const canWithdraw = computed(() => {
-	if (withdrawType.value === 1) {
-		return isKYCVerified.value && hasBankCard.value
-	}
-	return true
-})
-
-const showBankOption = computed(() => {
-	return withdrawConfig.value.withdraw_mode === 'bank' || withdrawConfig.value.withdraw_mode === 'both'
-})
-
-const showCryptoOption = computed(() => {
-	return withdrawConfig.value.withdraw_mode === 'crypto' || withdrawConfig.value.withdraw_mode === 'both'
-})
-
 const canSubmit = computed(() => {
 	const amt = parseFloat(amount.value) || 0
-	const baseCheck = amt >= minWithdraw.value && amt <= balance.value && payPassword.value.length === 6
-	
-	if (withdrawType.value === 1) {
-		return baseCheck && canWithdraw.value
-	} else {
-		return baseCheck && selectedNetwork.value && chainAddress.value && !chainAddressError.value
-	}
+	return amt >= minWithdraw.value && 
+		amt <= balance.value && 
+		payPassword.value.length === 6 &&
+		selectedNetwork.value && 
+		chainAddress.value && 
+		!chainAddressError.value
 })
 
 const addressPlaceholder = computed(() => {
@@ -387,11 +299,9 @@ const submitHintText = computed(() => {
 	if (amt < minWithdraw.value) return `最小提现 ${minWithdraw.value} USDT`
 	if (amt > balance.value) return '余额不足'
 	if (payPassword.value.length !== 6) return '请输入6位支付密码'
-	if (withdrawType.value === 2) {
-		if (!selectedNetwork.value) return '请选择网络'
-		if (!chainAddress.value) return '请输入钱包地址'
-		if (chainAddressError.value) return '地址格式错误'
-	}
+	if (!selectedNetwork.value) return '请选择网络'
+	if (!chainAddress.value) return '请输入钱包地址'
+	if (chainAddressError.value) return '地址格式错误'
 	return ''
 })
 
@@ -405,6 +315,8 @@ onMounted(() => {
 	fetchUserInfo()
 })
 
+
+
 // ==================== 方法定义 ====================
 const fetchWithdrawConfig = async () => {
 	try {
@@ -414,18 +326,12 @@ const fetchWithdrawConfig = async () => {
 		})
 		if (res.data) {
 			withdrawConfig.value = {
-				withdraw_mode: res.data.withdraw_mode || 'bank',
 				networks: res.data.networks || [],
 				crypto_fee: res.data.crypto_fee || 1,
 				usdt_currency_id: res.data.usdt_currency_id || 3
 			}
-			if (withdrawConfig.value.withdraw_mode === 'crypto') {
-				withdrawType.value = 2
-			} else {
-				withdrawType.value = 1
-			}
-			if (withdrawConfig.value.networks.length > 0) {
-				selectedNetwork.value = withdrawConfig.value.networks[0].name
+			if (availableNetworks.value.length > 0) {
+				selectedNetwork.value = availableNetworks.value[0].name
 			}
 		}
 		configLoaded.value = true
@@ -453,40 +359,11 @@ const fetchUserInfo = async () => {
 		} catch (err) {
 			console.log('获取用户信息失败')
 		}
-		
-		try {
-			const kycRes = await request({
-				url: '/kyc/status',
-				method: 'GET'
-			})
-			isKYCVerified.value = kycRes.data?.review_status === 2
-			if (isKYCVerified.value) {
-				kycInfo.value = {
-					real_name: kycRes.data?.name || '',
-					id_card: kycRes.data?.card_id_masked || ''
-				}
-				if (kycRes.data?.bank_card) {
-					hasBankCard.value = true
-					bankInfo.value = {
-						bank_account: kycRes.data.bank_card,
-						bank_name: '银行卡',
-						real_name: kycRes.data?.name || ''
-					}
-				}
-			}
-		} catch (err) {
-			isKYCVerified.value = false
-		}
 	} catch (err) {
 		uni.showToast({ title: '获取数据失败', icon: 'none' })
 	} finally {
 		loading.value = false
 	}
-}
-
-const switchWithdrawType = (type) => {
-	withdrawType.value = type
-	chainAddressError.value = ''
 }
 
 const selectNetwork = (network) => {
@@ -497,7 +374,7 @@ const selectNetwork = (network) => {
 }
 
 const getCurrentNetworkFee = () => {
-	const net = withdrawConfig.value.networks.find(n => n.name === selectedNetwork.value)
+	const net = availableNetworks.value.find(n => n.name === selectedNetwork.value)
 	return net ? net.fee : 0
 }
 
@@ -517,16 +394,8 @@ const validateChainAddress = (network, address) => {
 			if (addr.length !== 34) return 'TRC20地址长度必须为34位'
 			break
 		case 'ERC20':
-		case 'BEP20':
-		case 'Polygon':
-			if (!addr.startsWith('0x')) return `${network}地址必须以0x开头`
-			if (addr.length !== 42) return `${network}地址长度必须为42位`
-			break
-		case 'BRC20':
-			if (!addr.startsWith('bc1') && !addr.startsWith('1') && !addr.startsWith('3')) {
-				return 'BRC20地址格式不正确'
-			}
-			if (addr.length < 26 || addr.length > 62) return 'BRC20地址长度不正确'
+			if (!addr.startsWith('0x')) return 'ERC20地址必须以0x开头'
+			if (addr.length !== 42) return 'ERC20地址长度必须为42位'
 			break
 	}
 	
@@ -599,13 +468,6 @@ const formatBalanceDecimal = (num) => {
 	return val.toFixed(2).split('.')[1]
 }
 
-const formatBankCard = (cardNumber) => {
-	if (!cardNumber) return ''
-	const str = String(cardNumber)
-	if (str.length <= 8) return str
-	return `**** **** **** ${str.slice(-4)}`
-}
-
 const setMaxAmount = () => {
 	amount.value = String(balance.value)
 }
@@ -615,17 +477,10 @@ const submitWithdraw = async () => {
 	
 	const amt = parseFloat(amount.value)
 	
-	let confirmContent = ''
-	if (withdrawType.value === 1) {
-		confirmContent = `确认提现 ${formatNumber(amt)} USDT 到银行卡吗？`
-	} else {
-		confirmContent = `确认提现 ${formatNumber(amt)} USDT 到 ${selectedNetwork.value} 地址吗？\n\n钱包地址: ${chainAddress.value.slice(0, 8)}...${chainAddress.value.slice(-6)}`
-	}
-	
 	const confirmed = await new Promise((resolve) => {
 		uni.showModal({
 			title: '确认提现',
-			content: confirmContent,
+			content: `确认提现 ${formatNumber(amt)} USDT 到 ${selectedNetwork.value} 地址吗？\n\n钱包地址: ${chainAddress.value.slice(0, 8)}...${chainAddress.value.slice(-6)}`,
 			confirmText: '确认',
 			cancelText: '取消',
 			success: (res) => resolve(res.confirm)
@@ -636,24 +491,16 @@ const submitWithdraw = async () => {
 	
 	submitting.value = true
 	try {
-		const requestData = {
-			currency_id: withdrawConfig.value.usdt_currency_id,
-			amount: amt,
-			pay_password: payPassword.value,
-			withdraw_type: withdrawType.value
-		}
-		
-		if (withdrawType.value === 1) {
-			requestData.address = bankInfo.value.bank_account
-		} else {
-			requestData.network_type = selectedNetwork.value
-			requestData.chain_address = chainAddress.value.trim()
-		}
-		
 		await request({
 			url: '/wallet/withdraw',
 			method: 'POST',
-			data: requestData
+			data: {
+				currency_id: withdrawConfig.value.usdt_currency_id,
+				amount: amt,
+				pay_password: payPassword.value,
+				network_type: selectedNetwork.value,
+				chain_address: chainAddress.value.trim()
+			}
 		})
 		
 		uni.showToast({ 
@@ -671,14 +518,6 @@ const submitWithdraw = async () => {
 	} finally {
 		submitting.value = false
 	}
-}
-
-const goToKYC = () => {
-	uni.navigateTo({ url: '/pages/kyc/kyc' })
-}
-
-const goToBankCard = () => {
-	uni.navigateTo({ url: '/pages/wallet/bank-card' })
 }
 
 const goToRecords = () => {
@@ -794,6 +633,20 @@ $radius-lg: 16px;
 	margin-bottom: 12px;
 }
 
+.refresh-btn {
+	width: 32px;
+	height: 32px;
+	background: rgba(255, 255, 255, 0.2);
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.refresh-icon {
+	font-size: 16px;
+}
+
 .balance-title {
 	font-size: 13px;
 	color: rgba(255, 255, 255, 0.8);
@@ -827,179 +680,31 @@ $radius-lg: 16px;
 }
 
 .balance-hint {
-	font-size: 12px;
-	color: rgba(255, 255, 255, 0.6);
-}
+		font-size: 12px;
+		color: rgba(255, 255, 255, 0.6);
+	}
 
-// ==================== 提现方式切换 ====================
-.method-section {
-	margin-bottom: 16px;
-}
+	.balance-tip {
+		margin-top: 12px;
+		padding: 10px 12px;
+		background: rgba(255, 255, 255, 0.15);
+		border-radius: 8px;
+		display: flex;
+		align-items: flex-start;
+		gap: 8px;
 
-.section-label {
-	font-size: 13px;
-	color: $text-secondary;
-	margin-bottom: 10px;
-	display: block;
-	padding-left: 4px;
-}
+		.tip-icon {
+			font-size: 14px;
+			line-height: 1.4;
+		}
 
-.method-tabs {
-	display: flex;
-	background: $bg-card;
-	border-radius: $radius-md;
-	padding: 6px;
-	gap: 8px;
-}
-
-.method-tab {
-	flex: 1;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	gap: 8px;
-	padding: 12px 16px;
-	border-radius: $radius-sm;
-	transition: all 0.2s ease;
-	
-	&.active {
-		background: $primary;
-		
-		.tab-name {
-			color: #FFFFFF;
+		.tip-text {
+			font-size: 12px;
+			color: rgba(255, 255, 255, 0.9);
+			line-height: 1.4;
+			flex: 1;
 		}
 	}
-	
-	&:active {
-		transform: scale(0.98);
-	}
-}
-
-.tab-icon {
-	font-size: 18px;
-}
-
-.tab-name {
-	font-size: 14px;
-	font-weight: 600;
-	color: $text-secondary;
-}
-
-// ==================== 警告卡片 ====================
-.alert-card {
-	background: #FFF8E1;
-	border: 1px solid #FFE082;
-	border-radius: $radius-md;
-	padding: 14px 16px;
-	margin-bottom: 12px;
-	display: flex;
-	align-items: center;
-	gap: 12px;
-}
-
-.alert-icon {
-	font-size: 20px;
-	flex-shrink: 0;
-}
-
-.alert-content {
-	flex: 1;
-	min-width: 0;
-}
-
-.alert-title {
-	font-size: 14px;
-	font-weight: 600;
-	color: #E65100;
-	display: block;
-	margin-bottom: 2px;
-}
-
-.alert-text {
-	font-size: 12px;
-	color: #F57C00;
-}
-
-.alert-btn {
-	background: #FF9800;
-	color: #FFFFFF;
-	border: none;
-	border-radius: $radius-sm;
-	padding: 8px 14px;
-	font-size: 13px;
-	font-weight: 600;
-	height: auto;
-	line-height: 1.2;
-	flex-shrink: 0;
-}
-
-// ==================== 信息卡片 ====================
-.info-card {
-	background: $bg-card;
-	border-radius: $radius-md;
-	padding: 16px;
-	margin-bottom: 12px;
-}
-
-.info-header {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	margin-bottom: 12px;
-}
-
-.info-title {
-	font-size: 14px;
-	font-weight: 600;
-	color: $text-primary;
-}
-
-.info-status {
-	font-size: 11px;
-	background: #E8F5E9;
-	color: #2E7D32;
-	padding: 3px 8px;
-	border-radius: 8px;
-	font-weight: 500;
-}
-
-.bank-info {
-	display: flex;
-	align-items: center;
-	gap: 12px;
-	background: $bg-page;
-	padding: 14px;
-	border-radius: $radius-sm;
-}
-
-.bank-icon-wrap {
-	font-size: 24px;
-}
-
-.bank-detail {
-	flex: 1;
-}
-
-.bank-name {
-	font-size: 13px;
-	color: $text-secondary;
-	display: block;
-	margin-bottom: 4px;
-}
-
-.bank-number {
-	font-size: 15px;
-	font-weight: 600;
-	color: $text-primary;
-	font-family: 'Monaco', monospace;
-	display: block;
-	margin-bottom: 2px;
-}
-
-.bank-holder {
-	font-size: 12px;
-	color: $text-tertiary;
-}
 
 // ==================== 表单卡片 ====================
 .form-card {

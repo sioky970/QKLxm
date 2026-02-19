@@ -1350,10 +1350,10 @@ const startOrderTimers = (orderId, orderData) => {
 			finalExpectedProfit = settlement.finalProfit
 			console.log(`[最后${remainingSeconds}秒] 订单${orderId} 显示最终结算结果: 价格=${finalDisplayPrice.toFixed(2)}, 盈亏=${finalExpectedProfit.toFixed(2)}`)
 		} else {
-			// 正常计算预期收益
+			// 正常计算预期收益 - 盈亏1:1对称
 			const priceDiff = displayPrice - basePrice
 			const isProfit = order.side === 'buy' ? priceDiff > 0 : priceDiff < 0
-			finalExpectedProfit = isProfit ? order.amount * (order.rate / 100) : -order.amount
+			finalExpectedProfit = isProfit ? order.amount * (order.rate / 100) : -order.amount * (order.rate / 100)
 		}
 		
 		// 更新买卖压力
@@ -1381,11 +1381,11 @@ const calculateFinalSettlement = (order) => {
 	const amount = order.amount
 	const rate = order.rate / 100
 	
-	// 如果没有风控预设，使用当前价格计算
+	// 如果没有风控预设，使用当前价格计算 - 盈亏1:1对称
 	if (preProfitResult === 0) {
 		const priceDiff = order.currentPrice - basePrice
 		const isProfit = order.side === 'buy' ? priceDiff > 0 : priceDiff < 0
-		const finalProfit = isProfit ? amount * rate : -amount
+		const finalProfit = isProfit ? amount * rate : -amount * rate
 		return {
 			settlePrice: order.currentPrice,
 			finalProfit: finalProfit
@@ -1421,8 +1421,8 @@ const calculateFinalSettlement = (order) => {
 		}
 	}
 	
-	// 计算最终盈亏
-	const finalProfit = shouldProfit ? amount * rate : -amount
+	// 计算最终盈亏 - 盈亏1:1对称
+	const finalProfit = shouldProfit ? amount * rate : -amount * rate
 	
 	return {
 		settlePrice: settlePrice,
@@ -1921,12 +1921,12 @@ const mapMicroOrderToFrontend = (order) => {
 		side = 'sell'
 	}
 	
-	// 计算预期收益（进行中订单）
+	// 计算预期收益（进行中订单）- 盈亏1:1对称
 	let expectedProfit = 0
 	if (order.status === 0 && entryPrice > 0 && currentPrice > 0) {
 		const priceDiff = currentPrice - entryPrice
 		const isProfit = (side === 'buy' && priceDiff > 0) || (side === 'sell' && priceDiff < 0)
-		expectedProfit = isProfit ? amount * (rate / 100) : -amount
+		expectedProfit = isProfit ? amount * (rate / 100) : -amount * (rate / 100)
 	}
 	
 	// 已结算订单使用 fact_profits
@@ -2429,11 +2429,12 @@ const floorFixed = (num, decimals) => {
 const onSliderChange = (e) => {
 	const percent = e.detail.value
 	sliderValue.value = percent
-	// 直接计算并赋值，确保不超出余额
+	// 直接计算并赋值，确保不超出余额（使用当前标签页的可用余额）
+	const maxUsdt = parseFloat(availableBalance.value) || 0
 	if (percent === 100) {
-		marginAmount.value = floorFixed(usdtBalance.value, 2)
+		marginAmount.value = floorFixed(maxUsdt, 2)
 	} else {
-		const usdtAmount = usdtBalance.value * (percent / 100)
+		const usdtAmount = maxUsdt * (percent / 100)
 		marginAmount.value = floorFixed(usdtAmount, 2)
 	}
 	
@@ -2450,11 +2451,12 @@ const onSliderChange = (e) => {
 const onSliderChanging = (e) => {
 	const percent = e.detail.value
 	sliderValue.value = percent
-	// 直接内联计算，确保不超出余额
+	// 直接内联计算，确保不超出余额（使用当前标签页的可用余额）
+	const maxUsdt = parseFloat(availableBalance.value) || 0
 	if (percent === 100) {
-		marginAmount.value = floorFixed(usdtBalance.value, 2)
+		marginAmount.value = floorFixed(maxUsdt, 2)
 	} else {
-		const usdtAmount = usdtBalance.value * (percent / 100)
+		const usdtAmount = maxUsdt * (percent / 100)
 		marginAmount.value = floorFixed(usdtAmount, 2)
 	}
 	
@@ -2469,11 +2471,12 @@ const onSliderChanging = (e) => {
 
 // 根据滑块百分比计算保证金（保留用于其他调用）
 const calculateMarginBySlider = (percent) => {
-	// 永续合约使用USDT余额的百分比，确保不超出余额
+	// 永续合约使用当前标签页的可用余额的百分比，确保不超出余额
+	const maxUsdt = parseFloat(availableBalance.value) || 0
 	if (percent === 100) {
-		marginAmount.value = floorFixed(usdtBalance.value, 2)
+		marginAmount.value = floorFixed(maxUsdt, 2)
 	} else {
-		const usdtAmount = usdtBalance.value * (percent / 100)
+		const usdtAmount = maxUsdt * (percent / 100)
 		marginAmount.value = floorFixed(usdtAmount, 2)
 	}
 	

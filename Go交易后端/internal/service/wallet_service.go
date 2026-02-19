@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/shopspring/decimal"
 	"exchange-go/internal/model"
 	"exchange-go/internal/pkg/database"
 	"exchange-go/internal/pkg/logger"
@@ -328,17 +329,30 @@ func (s *WalletService) Withdraw(userID uint, req *WithdrawRequest) error {
 
 	// 开启事务
 	return database.DB.Transaction(func(tx *gorm.DB) error {
-		// 1. 统一使用 UserAssetsService 锁定资金
-		assetsSvc := GetUserAssetsService()
-		var err error
-		if currency.Name == "USDT" {
-			err = assetsSvc.LockUsdt(userID, req.Amount)
-		} else {
-			err = assetsSvc.LockCurrency(userID, currency.Name, req.Amount)
+		// 1. 从资金钱包扣除余额（而不是从UserAssets）
+		fundSvc := GetFundWalletService()
+		amount := decimal.NewFromFloat(req.Amount)
+		
+		// 获取资金钱包并检查余额
+		fundWallet, err := fundSvc.GetOrCreateFundWallet(uint64(userID), 1)
+		if err != nil {
+			return fmt.Errorf("获取资金钱包失败: %w", err)
 		}
 
-		if err != nil {
-			return fmt.Errorf("锁定资产失败: %w", err)
+		// 检查资金钱包余额是否足够
+		if fundWallet.AvailableBalance.LessThan(amount) {
+			return fmt.Errorf("资金钱包余额不足:当前余额%s,需要%s", 
+				fundWallet.AvailableBalance.String(), amount.String())
+		}
+
+		// 扣减资金钱包余额
+		fundWallet.AvailableBalance = fundWallet.AvailableBalance.Sub(amount)
+		fundWallet.LockedBalance = fundWallet.LockedBalance.Add(amount)
+		fundWallet.TotalWithdraw = fundWallet.TotalWithdraw.Add(amount)
+		fundWallet.UpdateTime = time.Now().Unix()
+
+		if err := tx.Save(fundWallet).Error; err != nil {
+			return fmt.Errorf("扣除资金钱包余额失败: %w", err)
 		}
 
 		// 2. 创建提现记录
@@ -347,12 +361,12 @@ func (s *WalletService) Withdraw(userID uint, req *WithdrawRequest) error {
 		}
 
 		// 3. 记录账户日志 (使用 tx)
-		logInfo := "申请提币扣除余额"
+		logInfo := "申请提币扣除资金钱包余额"
 		if req.WithdrawType == 2 {
-			logInfo = fmt.Sprintf("申请区块链提币(%s)扣除余额", req.NetworkType)
+			logInfo = fmt.Sprintf("申请区块链提币(%s)扣除资金钱包余额", req.NetworkType)
 		}
 		s.addAccountLog(tx, userID, req.CurrencyID, -req.Amount, logInfo, 200)
-		s.addAccountLog(tx, userID, req.CurrencyID, req.Amount, "申请提币冻结余额", 201)
+		s.addAccountLog(tx, userID, req.CurrencyID, req.Amount, "申请提币冻结资金钱包余额", 201)
 
 		// 4. WebSocket 实时推送余额变更
 		go s.BroadcastBalanceUpdate(userID)
@@ -954,6 +968,16 @@ func (s *WalletService) BroadcastBalanceUpdate(userID uint) {
 		deliveryBalance = walletBalance.DeliveryBalance.StringFixed(4)
 	}
 
+	// 获取资金钱包余额
+	var fundBalance string = "0"
+	fundSvc := GetFundWalletService()
+	fundWallet, err := fundSvc.GetOrCreateFundWallet(uint64(userID), 1)
+	if err != nil {
+		logger.Warnf("[WS] 获取资金钱包余额失败: userID=%d, err=%v", userID, err)
+	} else {
+		fundBalance = fundWallet.AvailableBalance.StringFixed(4)
+	}
+
 	// 构建WebSocket消息数据
 	data := map[string]interface{}{
 		"user_id":           userID,
@@ -964,6 +988,7 @@ func (s *WalletService) BroadcastBalanceUpdate(userID uint) {
 		"spot_balance":      spotBalance,
 		"contract_balance":  contractBalance,
 		"delivery_balance":  deliveryBalance,
+		"fund_balance":      fundBalance,
 		"assets":            assetOverview.Assets,
 		"update_time":       time.Now().Unix(),
 	}
@@ -973,8 +998,8 @@ func (s *WalletService) BroadcastBalanceUpdate(userID uint) {
 	hub := websocket.GetHub()
 	hub.SendToChannel(channelName, data)
 
-	logger.Infof("[WS] 余额变更推送成功: userID=%d, channel=%s, spot=%s, contract=%s, delivery=%s, balance=%.8f",
-		userID, channelName, spotBalance, contractBalance, deliveryBalance, assetOverview.TotalBalance)
+	logger.Infof("[WS] 余额变更推送成功: userID=%d, channel=%s, spot=%s, contract=%s, delivery=%s, fund=%s, balance=%.8f",
+		userID, channelName, spotBalance, contractBalance, deliveryBalance, fundBalance, assetOverview.TotalBalance)
 }
 
 // BroadcastOrderUpdate 推送订单状态变更

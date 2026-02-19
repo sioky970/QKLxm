@@ -58,7 +58,7 @@ func hashPasswordPHP(password string) string {
 	return hex.EncodeToString(finalHash[:])
 }
 
-// fixAdminPassword 修复admin密码使其与PHP算法一致
+// fixAdminPassword 修复admin密码使其使用标准MD5加密
 func (s *InitService) fixAdminPassword() {
 	// 检查admin账号是否存在
 	var admin model.Admin
@@ -67,15 +67,18 @@ func (s *InitService) fixAdminPassword() {
 		return
 	}
 
-	// 计算正确的密码哈希（使用PHP兼容算法）
-	correctPassword := hashPasswordPHP("admin")
+	// 计算正确的密码哈希（使用标准MD5加密）
+	password := "admin123"
+	hasher := md5.New()
+	hasher.Write([]byte(password))
+	correctPassword := hex.EncodeToString(hasher.Sum(nil))
 
 	// 如果密码不匹配，则更新
 	if admin.Password != correctPassword {
 		if err := database.DB.Model(&admin).Update("password", correctPassword).Error; err != nil {
 			logger.Errorf("修复admin密码失败: %v", err)
 		} else {
-			logger.Info("✓ admin密码已修复为PHP兼容格式 (admin/admin)")
+			logger.Info("✓ admin密码已修复为标准MD5格式 (admin/admin123)")
 		}
 	} else {
 		logger.Info("admin密码已是正确格式")

@@ -141,7 +141,14 @@ func GetWithdrawalsList(c *gin.Context) {
 		req.PageSize = 10
 	}
 
-	list, total, err := adminService.Wallet.GetWithdrawalsListWithFilter(0, req.CurrencyID, *req.Status, req.Page, req.PageSize)
+	// 处理 status 参数，如果为 nil 则使用 -1 表示不过滤
+	status := -1
+	if req.Status != nil {
+		status = *req.Status
+	}
+
+	// 使用新函数获取包含额外字段的数据（用户账号和币种名称）
+	list, total, err := adminService.Wallet.GetWithdrawalsListWithExtra(0, req.CurrencyID, status, req.Page, req.PageSize)
 	if err != nil {
 		response.Error(c, err.Error())
 		return

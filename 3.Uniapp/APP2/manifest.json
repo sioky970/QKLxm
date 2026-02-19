@@ -1,5 +1,5 @@
 {
-    "name" : "APP2",
+    "name" : "Coinbase CN",
     "appid" : "__UNI__137E17B",
     "description" : "",
     "versionName" : "1.0.0",
@@ -41,9 +41,22 @@
                 ]
             },
             /* ios打包配置 */
-            "ios" : {},
+            "ios" : {
+                "dSYMs" : false
+            },
             /* SDK配置 */
-            "sdkConfigs" : {}
+            "sdkConfigs" : {},
+            "icons" : {
+                "android" : {
+                    "hdpi" : "C:/Users/Administrator/Desktop/ScreenShot_2026-02-05_185425_186.png",
+                    "xhdpi" : "C:/Users/Administrator/Desktop/ScreenShot_2026-02-05_185425_186.png",
+                    "xxhdpi" : "C:/Users/Administrator/Desktop/ScreenShot_2026-02-05_185425_186.png",
+                    "xxxhdpi" : "C:/Users/Administrator/Desktop/ScreenShot_2026-02-05_185425_186.png"
+                },
+                "ios" : {
+                    "appstore" : ""
+                }
+            }
         }
     },
     /* 快应用特有相关 */

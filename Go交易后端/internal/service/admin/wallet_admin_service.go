@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 
 	"exchange-go/internal/model"
@@ -183,7 +184,7 @@ func (s *WalletAdminService) GetWithdrawalsListWithFilter(userID uint, currencyI
 		db = db.Where("user_id = ?", userID)
 	}
 	if currencyID > 0 {
-		db = db.Where("currency_id = ?", currencyID)
+		db = db.Where("currency = ?", currencyID)
 	}
 	if status >= 0 {
 		db = db.Where("status = ?", status)
@@ -197,6 +198,51 @@ func (s *WalletAdminService) GetWithdrawalsListWithFilter(userID uint, currencyI
 	offset := (page - 1) * pageSize
 	err = db.Limit(pageSize).Offset(offset).Order("id DESC").Find(&list).Error
 	return list, total, err
+}
+
+// GetWithdrawalsListWithExtra 带额外字段的提币列表（包含用户账号和币种名称）
+func (s *WalletAdminService) GetWithdrawalsListWithExtra(userID uint, currencyID uint, status int, page, pageSize int) (interface{}, int64, error) {
+	type WithdrawalWithExtra struct {
+		model.UsersWalletOut
+		AccountNumber string `json:"account_number"`
+		CurrencyName  string `json:"currency_name"`
+	}
+
+	var results []WithdrawalWithExtra
+
+	// 构建查询，关联用户表和币种表
+	query := database.DB.Table("users_wallet_out AS w").
+		Select(`w.*,
+			u.account_number,
+			c.name AS currency_name`).
+		Joins("LEFT JOIN users u ON w.user_id = u.id").
+		Joins("LEFT JOIN currency c ON w.currency = c.id")
+
+	if userID > 0 {
+		query = query.Where("w.user_id = ?", userID)
+	}
+	if currencyID > 0 {
+		query = query.Where("w.currency = ?", currencyID)
+	}
+	if status >= 0 {
+		query = query.Where("w.status = ?", status)
+	}
+
+	// 先查询总数
+	var total int64
+	err := query.Count(&total).Error
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// 分页查询
+	offset := (page - 1) * pageSize
+	err = query.Limit(pageSize).Offset(offset).Order("w.id DESC").Find(&results).Error
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return results, total, nil
 }
 
 // GetWithdrawalDetail 获取提币详情
@@ -220,8 +266,8 @@ func (s *WalletAdminService) ApproveWithdrawal(id uint, operatorID uint, operato
 
 		// 更新状态为已通过
 		updates := map[string]interface{}{
-			"status":     2, // 已通过
-			"updated_at": time.Now().Unix(),
+			"status":      2, // 已通过
+			"update_time": time.Now().Unix(),
 		}
 		if remark != "" {
 			updates["notes"] = withdrawal.Notes + " | 审核通过: " + remark
@@ -243,19 +289,32 @@ func (s *WalletAdminService) RejectWithdrawal(id uint, operatorID uint, operator
 			return errors.New("只能拒绝待处理的提币申请")
 		}
 
-		// 返还锁定的资金到用户可用余额
+		// 返还资金钱包的锁定余额到可用余额
 		if withdrawal.CurrencyID > 0 {
-			// 使用UserAssetsService解锁资金
-			assetsSvc := service.GetUserAssetsService()
-			if err := assetsSvc.UnlockUsdt(withdrawal.UserID, withdrawal.Number); err != nil {
-				return err
+			fundSvc := service.GetFundWalletService()
+			amount := decimal.NewFromFloat(withdrawal.Number)
+			
+			// 获取资金钱包
+			fundWallet, err := fundSvc.GetOrCreateFundWallet(uint64(withdrawal.UserID), 1)
+			if err != nil {
+				return fmt.Errorf("获取资金钱包失败: %w", err)
+			}
+
+			// 从锁定余额返还到可用余额
+			fundWallet.LockedBalance = fundWallet.LockedBalance.Sub(amount)
+			fundWallet.AvailableBalance = fundWallet.AvailableBalance.Add(amount)
+			fundWallet.TotalWithdraw = fundWallet.TotalWithdraw.Sub(amount)
+			fundWallet.UpdateTime = time.Now().Unix()
+
+			if err := tx.Save(fundWallet).Error; err != nil {
+				return fmt.Errorf("返还资金钱包余额失败: %w", err)
 			}
 		}
 
 		// 更新状态为已拒绝
 		updates := map[string]interface{}{
-			"status":     3, // 已拒绝
-			"updated_at": time.Now().Unix(),
+			"status":      3, // 已拒绝
+			"update_time": time.Now().Unix(),
 		}
 		if reason != "" {
 			updates["notes"] = withdrawal.Notes + " | 拒绝原因: " + reason
@@ -277,20 +336,35 @@ func (s *WalletAdminService) CompleteWithdrawal(id uint, txHash string, operator
 			return errors.New("只能完成已通过的提币申请")
 		}
 
-		// 解锁并扣除资金（实际打款已完成）
+		// 从资金钱包扣除锁定余额（实际打款已完成）
 		if withdrawal.CurrencyID > 0 {
-			// 使用UserAssetsService解锁资金（资金已实际转出）
-			assetsSvc := service.GetUserAssetsService()
-			if err := assetsSvc.UnlockUsdt(withdrawal.UserID, withdrawal.Number); err != nil {
-				return err
+			fundSvc := service.GetFundWalletService()
+			amount := decimal.NewFromFloat(withdrawal.Number)
+			
+			// 获取资金钱包
+			fundWallet, err := fundSvc.GetOrCreateFundWallet(uint64(withdrawal.UserID), 1)
+			if err != nil {
+				return fmt.Errorf("获取资金钱包失败: %w", err)
 			}
-			// 注意：实际扣除在解锁时已完成，因为锁定余额减少了
+
+			// 检查锁定余额是否足够
+			if fundWallet.LockedBalance.LessThan(amount) {
+				return errors.New("资金钱包锁定余额不足")
+			}
+
+			// 扣除锁定余额（资金已实际转出）
+			fundWallet.LockedBalance = fundWallet.LockedBalance.Sub(amount)
+			fundWallet.UpdateTime = time.Now().Unix()
+
+			if err := tx.Save(fundWallet).Error; err != nil {
+				return fmt.Errorf("扣除资金钱包锁定余额失败: %w", err)
+			}
 		}
 
 		// 更新状态为已完成
 		updates := map[string]interface{}{
-			"status":     4, // 已完成
-			"updated_at": time.Now().Unix(),
+			"status":      4, // 已完成
+			"update_time": time.Now().Unix(),
 		}
 		if txHash != "" {
 			updates["tx_hash"] = txHash
