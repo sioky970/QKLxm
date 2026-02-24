@@ -1,0 +1,565 @@
+basePath: /api
+definitions:
+  response.Response:
+    properties:
+      data: {}
+      message:
+        type: string
+      type:
+        type: string
+    type: object
+  service.Direction:
+    enum:
+    - rise
+    - fall
+    type: string
+    x-enum-comments:
+      DirectionFall: 买跌
+      DirectionRise: 买涨
+    x-enum-descriptions:
+    - 买涨
+    - 买跌
+    x-enum-varnames:
+    - DirectionRise
+    - DirectionFall
+  service.Duration:
+    enum:
+    - 5
+    - 10
+    - 15
+    - 30
+    - 60
+    type: integer
+    x-enum-comments:
+      Duration5S: 5秒
+      Duration10S: 10秒
+      Duration15S: 15秒
+      Duration30S: 30秒
+      Duration60S: 60秒
+    x-enum-descriptions:
+    - 5秒
+    - 10秒
+    - 15秒
+    - 30秒
+    - 60秒
+    x-enum-varnames:
+    - Duration5S
+    - Duration10S
+    - Duration15S
+    - Duration30S
+    - Duration60S
+  service.FuturesSubmitOrderRequest:
+    properties:
+      currency_id:
+        type: integer
+      legal_id:
+        type: integer
+      leverage:
+        allOf:
+        - $ref: '#/definitions/service.LeverageLevel'
+        description: 杠杆倍数
+      order_type:
+        allOf:
+        - $ref: '#/definitions/service.OrderType'
+        description: 订单类型
+      position_side:
+        allOf:
+        - $ref: '#/definitions/service.PositionSide'
+        description: 持仓方向
+      price:
+        description: 价格
+        type: number
+      quantity:
+        description: 数量
+        type: number
+      reduce_only:
+        description: 仅减仓
+        type: boolean
+      stop_loss_price:
+        description: 止损价格
+        type: number
+      take_profit_price:
+        description: 止盈价格
+        type: number
+      trigger_price:
+        description: 触发价格
+        type: number
+    required:
+    - currency_id
+    - legal_id
+    - leverage
+    - order_type
+    - position_side
+    - price
+    - quantity
+    type: object
+  service.LeverageLevel:
+    enum:
+    - 5
+    - 10
+    - 20
+    - 50
+    type: integer
+    x-enum-comments:
+      Leverage50X: 50倍
+      Leverage5X: 5倍
+      Leverage10X: 10倍
+      Leverage20X: 20倍
+    x-enum-descriptions:
+    - 5倍
+    - 10倍
+    - 20倍
+    - 50倍
+    x-enum-varnames:
+    - Leverage5X
+    - Leverage10X
+    - Leverage20X
+    - Leverage50X
+  service.LoginRequest:
+    properties:
+      area_code_id:
+        description: 区号ID
+        type: integer
+      password:
+        type: string
+      type:
+        description: 1:普通密码 2:手势密码
+        type: integer
+      user_string:
+        type: string
+    required:
+    - password
+    - user_string
+    type: object
+  service.MicroSubmitOrderRequest:
+    properties:
+      amount:
+        description: 投资金额
+        type: number
+      currency_id:
+        type: integer
+      direction:
+        allOf:
+        - $ref: '#/definitions/service.Direction'
+        description: 方向
+      duration:
+        allOf:
+        - $ref: '#/definitions/service.Duration'
+        description: 持续时间
+      legal_id:
+        type: integer
+      profit_ratio:
+        description: 盈利率
+        minimum: 0
+        type: number
+    required:
+    - amount
+    - currency_id
+    - direction
+    - duration
+    - legal_id
+    - profit_ratio
+    type: object
+  service.OrderSide:
+    enum:
+    - buy
+    - sell
+    type: string
+    x-enum-comments:
+      OrderSideBuy: 买入
+      OrderSideSell: 卖出
+    x-enum-descriptions:
+    - 买入
+    - 卖出
+    x-enum-varnames:
+    - OrderSideBuy
+    - OrderSideSell
+  service.OrderType:
+    enum:
+    - limit
+    - market
+    - stop_loss
+    - take_profit
+    type: string
+    x-enum-comments:
+      OrderTypeLimit: 限价单
+      OrderTypeMarket: 市价单
+      OrderTypeStopLoss: 止损单
+      OrderTypeTakeProfit: 止盈单
+    x-enum-descriptions:
+    - 限价单
+    - 市价单
+    - 止损单
+    - 止盈单
+    x-enum-varnames:
+    - OrderTypeLimit
+    - OrderTypeMarket
+    - OrderTypeStopLoss
+    - OrderTypeTakeProfit
+  service.PositionSide:
+    enum:
+    - long
+    - short
+    type: string
+    x-enum-comments:
+      PositionSideLong: 多头
+      PositionSideShort: 空头
+    x-enum-descriptions:
+    - 多头
+    - 空头
+    x-enum-varnames:
+    - PositionSideLong
+    - PositionSideShort
+  service.RechargeRequest:
+    properties:
+      account:
+        description: 用户账号
+        type: string
+      amount:
+        description: 充值金额
+        type: number
+      currency_id:
+        type: integer
+      hash:
+        description: 交易哈希
+        type: string
+      pic:
+        description: 图片凭证
+        type: string
+      type:
+        description: 地址类型
+        type: string
+    required:
+    - account
+    - amount
+    - currency_id
+    type: object
+  service.RegisterRequest:
+    properties:
+      code:
+        description: 验证码
+        type: string
+      country_code:
+        description: 区号ID
+        type: integer
+      extension_code:
+        description: 邀请码
+        type: string
+      password:
+        maxLength: 16
+        minLength: 6
+        type: string
+      re_password:
+        type: string
+      type:
+        description: mobile 或 email
+        type: string
+      user_string:
+        description: 手机号或邮箱
+        type: string
+    required:
+    - code
+    - password
+    - re_password
+    - type
+    - user_string
+    type: object
+  service.SpotSubmitOrderRequest:
+    properties:
+      currency_id:
+        type: integer
+      legal_id:
+        type: integer
+      price:
+        description: 价格
+        type: number
+      quantity:
+        description: 数量
+        type: number
+      side:
+        allOf:
+        - $ref: '#/definitions/service.OrderSide'
+        description: buy 或 sell
+      trigger_price:
+        description: 触发价格(条件单)
+        type: number
+      trigger_type:
+        description: 触发类型(条件单)
+        type: string
+      type:
+        allOf:
+        - $ref: '#/definitions/service.OrderType'
+        description: limit 或 market
+    required:
+    - currency_id
+    - legal_id
+    - price
+    - quantity
+    - side
+    - type
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: support@swagger.io
+    name: API Support
+    url: http://www.swagger.io/support
+  description: OKCoinsgp数字货币交易所API接口文档
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: Exchange API
+  version: "1.0"
+paths:
+  /lever/submit:
+    post:
+      consumes:
+      - application/json
+      description: 提交合约交易订单，开仓或加仓
+      parameters:
+      - description: 下单参数
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/service.FuturesSubmitOrderRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 下单成功
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  type: object
+              type: object
+        "401":
+          description: 未登录
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: 合约交易下单
+      tags:
+      - 合约交易
+  /micro/submit:
+    post:
+      consumes:
+      - application/json
+      description: 提交秒合约订单，预测涨跌
+      parameters:
+      - description: 下单参数
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/service.MicroSubmitOrderRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 下单成功
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  type: object
+              type: object
+        "401":
+          description: 未登录
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: 秒合约交易
+      tags:
+      - 秒合约
+  /transaction/submit:
+    post:
+      consumes:
+      - application/json
+      description: 提交币币交易订单（限价单/市价单）
+      parameters:
+      - description: 下单参数
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/service.SpotSubmitOrderRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 下单成功
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  type: object
+              type: object
+        "401":
+          description: 未登录
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: 币币交易下单
+      tags:
+      - 币币交易
+  /user/info:
+    get:
+      consumes:
+      - application/json
+      description: 获取当前登录用户的详细信息
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 获取成功
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  type: object
+              type: object
+        "401":
+          description: 未登录
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: 获取当前用户信息
+      tags:
+      - 用户模块
+  /user/login:
+    post:
+      consumes:
+      - application/json
+      description: 用户登录获取JWT Token
+      parameters:
+      - description: 登录参数
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/service.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 登录成功，返回token和用户信息
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  type: object
+              type: object
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: 账号或密码错误
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: 用户登录
+      tags:
+      - 用户模块
+  /user/register:
+    post:
+      consumes:
+      - application/json
+      description: 新用户注册接口
+      parameters:
+      - description: 注册参数
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/service.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 注册成功
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/response.Response'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: 用户注册
+      tags:
+      - 用户模块
+  /wallet/list:
+    get:
+      consumes:
+      - application/json
+      description: 获取用户各种币种的钱包列表
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 获取成功
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  type: array
+              type: object
+        "401":
+          description: 未登录
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: 获取用户所有钱包
+      tags:
+      - 钱包模块
+  /wallet/recharge:
+    post:
+      consumes:
+      - application/json
+      description: 申请充值到指定币种钱包
+      parameters:
+      - description: 充值参数
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/service.RechargeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 充值申请已提交
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: 未登录
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: 钱包充值
+      tags:
+      - 钱包模块
+securityDefinitions:
+  BearerAuth:
+    description: JWT Token格式："Bearer {token}"
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

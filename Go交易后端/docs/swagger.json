@@ -1,0 +1,857 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "description": "OKCoinsgp数字货币交易所API接口文档",
+        "title": "Exchange API",
+        "termsOfService": "http://swagger.io/terms/",
+        "contact": {
+            "name": "API Support",
+            "url": "http://www.swagger.io/support",
+            "email": "support@swagger.io"
+        },
+        "license": {
+            "name": "Apache 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.html"
+        },
+        "version": "1.0"
+    },
+    "host": "localhost:8080",
+    "basePath": "/api",
+    "paths": {
+        "/lever/submit": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "提交合约交易订单，开仓或加仓",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "合约交易"
+                ],
+                "summary": "合约交易下单",
+                "parameters": [
+                    {
+                        "description": "下单参数",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/service.FuturesSubmitOrderRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "下单成功",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "未登录",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/micro/submit": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "提交秒合约订单，预测涨跌",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "秒合约"
+                ],
+                "summary": "秒合约交易",
+                "parameters": [
+                    {
+                        "description": "下单参数",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/service.MicroSubmitOrderRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "下单成功",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "未登录",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/transaction/submit": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "提交币币交易订单（限价单/市价单）",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "币币交易"
+                ],
+                "summary": "币币交易下单",
+                "parameters": [
+                    {
+                        "description": "下单参数",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/service.SpotSubmitOrderRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "下单成功",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "未登录",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/user/info": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取当前登录用户的详细信息",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "用户模块"
+                ],
+                "summary": "获取当前用户信息",
+                "responses": {
+                    "200": {
+                        "description": "获取成功",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "未登录",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/user/login": {
+            "post": {
+                "description": "用户登录获取JWT Token",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "用户模块"
+                ],
+                "summary": "用户登录",
+                "parameters": [
+                    {
+                        "description": "登录参数",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/service.LoginRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "登录成功，返回token和用户信息",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "账号或密码错误",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/user/register": {
+            "post": {
+                "description": "新用户注册接口",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "用户模块"
+                ],
+                "summary": "用户注册",
+                "parameters": [
+                    {
+                        "description": "注册参数",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/service.RegisterRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "注册成功",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/wallet/list": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取用户各种币种的钱包列表",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "钱包模块"
+                ],
+                "summary": "获取用户所有钱包",
+                "responses": {
+                    "200": {
+                        "description": "获取成功",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "未登录",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/wallet/recharge": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "申请充值到指定币种钱包",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "钱包模块"
+                ],
+                "summary": "钱包充值",
+                "parameters": [
+                    {
+                        "description": "充值参数",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/service.RechargeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "充值申请已提交",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "未登录",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "response.Response": {
+            "type": "object",
+            "properties": {
+                "data": {},
+                "message": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "service.Direction": {
+            "type": "string",
+            "enum": [
+                "rise",
+                "fall"
+            ],
+            "x-enum-comments": {
+                "DirectionFall": "买跌",
+                "DirectionRise": "买涨"
+            },
+            "x-enum-descriptions": [
+                "买涨",
+                "买跌"
+            ],
+            "x-enum-varnames": [
+                "DirectionRise",
+                "DirectionFall"
+            ]
+        },
+        "service.Duration": {
+            "type": "integer",
+            "enum": [
+                5,
+                10,
+                15,
+                30,
+                60
+            ],
+            "x-enum-comments": {
+                "Duration10S": "10秒",
+                "Duration15S": "15秒",
+                "Duration30S": "30秒",
+                "Duration5S": "5秒",
+                "Duration60S": "60秒"
+            },
+            "x-enum-descriptions": [
+                "5秒",
+                "10秒",
+                "15秒",
+                "30秒",
+                "60秒"
+            ],
+            "x-enum-varnames": [
+                "Duration5S",
+                "Duration10S",
+                "Duration15S",
+                "Duration30S",
+                "Duration60S"
+            ]
+        },
+        "service.FuturesSubmitOrderRequest": {
+            "type": "object",
+            "required": [
+                "currency_id",
+                "legal_id",
+                "leverage",
+                "order_type",
+                "position_side",
+                "price",
+                "quantity"
+            ],
+            "properties": {
+                "currency_id": {
+                    "type": "integer"
+                },
+                "legal_id": {
+                    "type": "integer"
+                },
+                "leverage": {
+                    "description": "杠杆倍数",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/service.LeverageLevel"
+                        }
+                    ]
+                },
+                "order_type": {
+                    "description": "订单类型",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/service.OrderType"
+                        }
+                    ]
+                },
+                "position_side": {
+                    "description": "持仓方向",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/service.PositionSide"
+                        }
+                    ]
+                },
+                "price": {
+                    "description": "价格",
+                    "type": "number"
+                },
+                "quantity": {
+                    "description": "数量",
+                    "type": "number"
+                },
+                "reduce_only": {
+                    "description": "仅减仓",
+                    "type": "boolean"
+                },
+                "stop_loss_price": {
+                    "description": "止损价格",
+                    "type": "number"
+                },
+                "take_profit_price": {
+                    "description": "止盈价格",
+                    "type": "number"
+                },
+                "trigger_price": {
+                    "description": "触发价格",
+                    "type": "number"
+                }
+            }
+        },
+        "service.LeverageLevel": {
+            "type": "integer",
+            "enum": [
+                5,
+                10,
+                20,
+                50
+            ],
+            "x-enum-comments": {
+                "Leverage10X": "10倍",
+                "Leverage20X": "20倍",
+                "Leverage50X": "50倍",
+                "Leverage5X": "5倍"
+            },
+            "x-enum-descriptions": [
+                "5倍",
+                "10倍",
+                "20倍",
+                "50倍"
+            ],
+            "x-enum-varnames": [
+                "Leverage5X",
+                "Leverage10X",
+                "Leverage20X",
+                "Leverage50X"
+            ]
+        },
+        "service.LoginRequest": {
+            "type": "object",
+            "required": [
+                "password",
+                "user_string"
+            ],
+            "properties": {
+                "area_code_id": {
+                    "description": "区号ID",
+                    "type": "integer"
+                },
+                "password": {
+                    "type": "string"
+                },
+                "type": {
+                    "description": "1:普通密码 2:手势密码",
+                    "type": "integer"
+                },
+                "user_string": {
+                    "type": "string"
+                }
+            }
+        },
+        "service.MicroSubmitOrderRequest": {
+            "type": "object",
+            "required": [
+                "amount",
+                "currency_id",
+                "direction",
+                "duration",
+                "legal_id",
+                "profit_ratio"
+            ],
+            "properties": {
+                "amount": {
+                    "description": "投资金额",
+                    "type": "number"
+                },
+                "currency_id": {
+                    "type": "integer"
+                },
+                "direction": {
+                    "description": "方向",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/service.Direction"
+                        }
+                    ]
+                },
+                "duration": {
+                    "description": "持续时间",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/service.Duration"
+                        }
+                    ]
+                },
+                "legal_id": {
+                    "type": "integer"
+                },
+                "profit_ratio": {
+                    "description": "盈利率",
+                    "type": "number",
+                    "minimum": 0
+                }
+            }
+        },
+        "service.OrderSide": {
+            "type": "string",
+            "enum": [
+                "buy",
+                "sell"
+            ],
+            "x-enum-comments": {
+                "OrderSideBuy": "买入",
+                "OrderSideSell": "卖出"
+            },
+            "x-enum-descriptions": [
+                "买入",
+                "卖出"
+            ],
+            "x-enum-varnames": [
+                "OrderSideBuy",
+                "OrderSideSell"
+            ]
+        },
+        "service.OrderType": {
+            "type": "string",
+            "enum": [
+                "limit",
+                "market",
+                "stop_loss",
+                "take_profit"
+            ],
+            "x-enum-comments": {
+                "OrderTypeLimit": "限价单",
+                "OrderTypeMarket": "市价单",
+                "OrderTypeStopLoss": "止损单",
+                "OrderTypeTakeProfit": "止盈单"
+            },
+            "x-enum-descriptions": [
+                "限价单",
+                "市价单",
+                "止损单",
+                "止盈单"
+            ],
+            "x-enum-varnames": [
+                "OrderTypeLimit",
+                "OrderTypeMarket",
+                "OrderTypeStopLoss",
+                "OrderTypeTakeProfit"
+            ]
+        },
+        "service.PositionSide": {
+            "type": "string",
+            "enum": [
+                "long",
+                "short"
+            ],
+            "x-enum-comments": {
+                "PositionSideLong": "多头",
+                "PositionSideShort": "空头"
+            },
+            "x-enum-descriptions": [
+                "多头",
+                "空头"
+            ],
+            "x-enum-varnames": [
+                "PositionSideLong",
+                "PositionSideShort"
+            ]
+        },
+        "service.RechargeRequest": {
+            "type": "object",
+            "required": [
+                "account",
+                "amount",
+                "currency_id"
+            ],
+            "properties": {
+                "account": {
+                    "description": "用户账号",
+                    "type": "string"
+                },
+                "amount": {
+                    "description": "充值金额",
+                    "type": "number"
+                },
+                "currency_id": {
+                    "type": "integer"
+                },
+                "hash": {
+                    "description": "交易哈希",
+                    "type": "string"
+                },
+                "pic": {
+                    "description": "图片凭证",
+                    "type": "string"
+                },
+                "type": {
+                    "description": "地址类型",
+                    "type": "string"
+                }
+            }
+        },
+        "service.RegisterRequest": {
+            "type": "object",
+            "required": [
+                "code",
+                "password",
+                "re_password",
+                "type",
+                "user_string"
+            ],
+            "properties": {
+                "code": {
+                    "description": "验证码",
+                    "type": "string"
+                },
+                "country_code": {
+                    "description": "区号ID",
+                    "type": "integer"
+                },
+                "extension_code": {
+                    "description": "邀请码",
+                    "type": "string"
+                },
+                "password": {
+                    "type": "string",
+                    "maxLength": 16,
+                    "minLength": 6
+                },
+                "re_password": {
+                    "type": "string"
+                },
+                "type": {
+                    "description": "mobile 或 email",
+                    "type": "string"
+                },
+                "user_string": {
+                    "description": "手机号或邮箱",
+                    "type": "string"
+                }
+            }
+        },
+        "service.SpotSubmitOrderRequest": {
+            "type": "object",
+            "required": [
+                "currency_id",
+                "legal_id",
+                "price",
+                "quantity",
+                "side",
+                "type"
+            ],
+            "properties": {
+                "currency_id": {
+                    "type": "integer"
+                },
+                "legal_id": {
+                    "type": "integer"
+                },
+                "price": {
+                    "description": "价格",
+                    "type": "number"
+                },
+                "quantity": {
+                    "description": "数量",
+                    "type": "number"
+                },
+                "side": {
+                    "description": "buy 或 sell",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/service.OrderSide"
+                        }
+                    ]
+                },
+                "trigger_price": {
+                    "description": "触发价格(条件单)",
+                    "type": "number"
+                },
+                "trigger_type": {
+                    "description": "触发类型(条件单)",
+                    "type": "string"
+                },
+                "type": {
+                    "description": "limit 或 market",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/service.OrderType"
+                        }
+                    ]
+                }
+            }
+        }
+    },
+    "securityDefinitions": {
+        "BearerAuth": {
+            "description": "JWT Token格式：\"Bearer {token}\"",
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header"
+        }
+    }
+}

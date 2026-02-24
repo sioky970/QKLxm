@@ -1,0 +1,340 @@
+package service
+
+import (
+	"errors"
+	"fmt"
+	"time"
+
+	"exchange-go/internal/model"
+	"exchange-go/internal/pkg/cache"
+	"exchange-go/internal/pkg/database"
+	"exchange-go/internal/pkg/logger"
+
+	"github.com/go-redis/redis/v8"
+	"gorm.io/gorm"
+)
+
+// UserAssetsService 用户资产服务(JSON聚合存储) - 带缓存版本
+type UserAssetsService struct{}
+
+var userAssetsServiceInstance *UserAssetsService
+
+// CacheConfig 缓存配置
+var userAssetsCacheConfig = struct {
+	Enabled    bool
+	Expiration time.Duration
+}{
+	Enabled:    true,
+	Expiration: 30 * time.Second,
+}
+
+// GetUserAssetsService 获取用户资产服务实例
+func GetUserAssetsService() *UserAssetsService {
+	if userAssetsServiceInstance == nil {
+		userAssetsServiceInstance = &UserAssetsService{}
+	}
+	return userAssetsServiceInstance
+}
+
+// ============================================================
+// 缓存查询操作（带Redis缓存）
+// ============================================================
+
+// GetUserAssets 获取用户资产（带缓存）
+func (s *UserAssetsService) GetUserAssets(userID uint) (*model.UserAssets, error) {
+	// 如果启用缓存，尝试从缓存获取
+	if userAssetsCacheConfig.Enabled && cache.RDB != nil {
+		assets, err := s.getUserAssetsFromCache(userID)
+		if err == nil && assets != nil {
+			logger.Debugf("[UserAssets] 缓存命中: userID=%d", userID)
+			return assets, nil
+		}
+		if err != nil && err != redis.Nil {
+			logger.Warnf("[UserAssets] 获取缓存失败: userID=%d, err=%v", userID, err)
+		}
+	}
+
+	// 缓存未命中，从数据库查询
+	var assets model.UserAssets
+	err := database.DB.Where("user_id = ?", userID).First(&assets).Error
+
+	if err == gorm.ErrRecordNotFound {
+		// 用户资产不存在，创建默认记录
+		assets, err = s.CreateUserAssets(userID)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if err != nil {
+		logger.Errorf("[UserAssets] 查询用户资产失败: userID=%d, err=%v", userID, err)
+		return nil, err
+	}
+
+	// 写入缓存
+	if userAssetsCacheConfig.Enabled && cache.RDB != nil {
+		if err := s.setUserAssetsToCache(userID, &assets); err != nil {
+			logger.Warnf("[UserAssets] 写入缓存失败: userID=%d, err=%v", userID, err)
+		}
+	}
+
+	return &assets, nil
+}
+
+// getUserAssetsFromCache 从缓存获取用户资产
+func (s *UserAssetsService) getUserAssetsFromCache(userID uint) (*model.UserAssets, error) {
+	key := fmt.Sprintf("user:assets:%d", userID)
+	var assets model.UserAssets
+	err := cache.Get(key, &assets)
+	return &assets, err
+}
+
+// setUserAssetsToCache 写入用户资产到缓存
+func (s *UserAssetsService) setUserAssetsToCache(userID uint, assets *model.UserAssets) error {
+	key := fmt.Sprintf("user:assets:%d", userID)
+	return cache.Set(key, assets, userAssetsCacheConfig.Expiration)
+}
+
+// InvalidateUserAssetsCache 使用户资产缓存失效
+func (s *UserAssetsService) InvalidateUserAssetsCache(userID uint) error {
+	if !userAssetsCacheConfig.Enabled || cache.RDB == nil {
+		return nil
+	}
+	key := fmt.Sprintf("user:assets:%d", userID)
+	return cache.Delete(key)
+}
+
+// InvalidateUserAssetsCacheBatch 批量使缓存失效
+func (s *UserAssetsService) InvalidateUserAssetsCacheBatch(userIDs []uint) error {
+	if !userAssetsCacheConfig.Enabled || cache.RDB == nil {
+		return nil
+	}
+	if len(userIDs) == 0 {
+		return nil
+	}
+	keys := make([]string, len(userIDs))
+	for i, userID := range userIDs {
+		keys[i] = fmt.Sprintf("user:assets:%d", userID)
+	}
+	return cache.Delete(keys...)
+}
+
+// CreateUserAssets 创建用户资产记录
+func (s *UserAssetsService) CreateUserAssets(userID uint) (*model.UserAssets, error) {
+	now := time.Now().Unix()
+	assets := &model.UserAssets{
+		UserID:           userID,
+		UsdtBalance:      0,
+		UsdtLocked:       0,
+		CurrencyBalances: make(model.CurrencyBalance),
+		CurrencyLocked:   make(model.CurrencyBalance),
+		TotalValueUsdt:   0,
+		LastTradeTime:    0,
+		LastUpdateTime:   now,
+		Version:          0,
+		CreateTime:       now,
+		UpdateTime:       now,
+	}
+
+	err := database.DB.Create(assets).Error
+	if err != nil {
+		logger.Errorf("[UserAssets] 创建用户资产失败: userID=%d, err=%v", userID, err)
+		return nil, err
+	}
+
+	logger.Infof("[UserAssets] 创建用户资产成功: userID=%d", userID)
+
+	// 写入缓存
+	if userAssetsCacheConfig.Enabled && cache.RDB != nil {
+		if err := s.setUserAssetsToCache(userID, assets); err != nil {
+			logger.Warnf("[UserAssets] 写入缓存失败: userID=%d, err=%v", userID, err)
+		}
+	}
+
+	return assets, nil
+}
+
+// GetOrCreateUserAssets 获取或创建用户资产
+func (s *UserAssetsService) GetOrCreateUserAssets(userID uint) (*model.UserAssets, error) {
+	assets, err := s.GetUserAssets(userID)
+	if err != nil && err != gorm.ErrRecordNotFound {
+		return nil, err
+	}
+	return assets, nil
+}
+
+// ============================================================
+// USDT余额操作（带缓存失效）
+// ============================================================
+
+// TransferUsdt USDT转账
+func (s *UserAssetsService) TransferUsdt(fromUserID, toUserID uint, amount float64) error {
+	if amount <= 0 {
+		return errors.New("转账金额必须大于0")
+	}
+
+	return database.DB.Transaction(func(tx *gorm.DB) error {
+		var fromAssets, toAssets model.UserAssets
+
+		// 锁定并查询转出账户
+		if err := tx.Where("user_id = ?", fromUserID).Set("gorm:query_option", "FOR UPDATE").First(&fromAssets).Error; err != nil {
+			return errors.New("转出账户不存在")
+		}
+
+		// 锁定并查询转入账户
+		if err := tx.Where("user_id = ?", toUserID).Set("gorm:query_option", "FOR UPDATE").First(&toAssets).Error; err != nil {
+			return errors.New("转入账户不存在")
+		}
+
+		// 检查余额
+		if fromAssets.UsdtBalance < amount {
+			return errors.New("USDT余额不足")
+		}
+
+		// 执行转账
+		now := time.Now().Unix()
+		fromAssets.UsdtBalance -= amount
+		fromAssets.LastUpdateTime = now
+		fromAssets.LastTradeTime = now
+
+		toAssets.UsdtBalance += amount
+		toAssets.LastUpdateTime = now
+
+		if err := tx.Save(&fromAssets).Error; err != nil {
+			return err
+		}
+
+		if err := tx.Save(&toAssets).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	// 注意：此函数修改后需要添加缓存失效逻辑
+	// s.InvalidateUserAssetsCacheBatch([]uint{fromUserID, toUserID})
+}
+
+// LockUsdt 锁定USDT
+func (s *UserAssetsService) LockUsdt(userID uint, amount float64) error {
+	if amount <= 0 {
+		return errors.New("锁定金额必须大于0")
+	}
+
+	var assets model.UserAssets
+
+	return database.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("user_id = ?", userID).Set("gorm:query_option", "FOR UPDATE").First(&assets).Error; err != nil {
+			return errors.New("用户资产不存在")
+		}
+
+		if assets.UsdtBalance < amount {
+			return errors.New("USDT余额不足")
+		}
+
+		assets.UsdtBalance -= amount
+		assets.UsdtLocked += amount
+		assets.LastUpdateTime = time.Now().Unix()
+
+		if err := tx.Save(&assets).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	// 注意：此函数修改后需要添加缓存失效逻辑
+	// s.InvalidateUserAssetsCache(userID)
+}
+
+// UnlockUsdt 解锁USDT
+func (s *UserAssetsService) UnlockUsdt(userID uint, amount float64) error {
+	if amount <= 0 {
+		return errors.New("解锁金额必须大于0")
+	}
+
+	var assets model.UserAssets
+
+	return database.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("user_id = ?", userID).Set("gorm:query_option", "FOR UPDATE").First(&assets).Error; err != nil {
+			return errors.New("用户资产不存在")
+		}
+
+		if assets.UsdtLocked < amount {
+			return errors.New("锁定的USDT不足")
+		}
+
+		assets.UsdtBalance += amount
+		assets.UsdtLocked -= amount
+		assets.LastUpdateTime = time.Now().Unix()
+
+		if err := tx.Save(&assets).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	// 注意：此函数修改后需要添加缓存失效逻辑
+	// s.InvalidateUserAssetsCache(userID)
+}
+
+// AddUsdt 增加USDT（充值）
+func (s *UserAssetsService) AddUsdt(userID uint, amount float64) error {
+	if amount <= 0 {
+		return errors.New("增加金额必须大于0")
+	}
+
+	var assets model.UserAssets
+
+	return database.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("user_id = ?", userID).Set("gorm:query_option", "FOR UPDATE").First(&assets).Error; err != nil {
+			return errors.New("用户资产不存在")
+		}
+
+		assets.UsdtBalance += amount
+		assets.LastUpdateTime = time.Now().Unix()
+		assets.LastTradeTime = time.Now().Unix()
+
+		if err := tx.Save(&assets).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	// 注意：此函数修改后需要添加缓存失效逻辑
+	// s.InvalidateUserAssetsCache(userID)
+}
+
+// DeductUsdt 扣减USDT（提现）
+func (s *UserAssetsService) DeductUsdt(userID uint, amount float64) error {
+	if amount <= 0 {
+		return errors.New("扣减金额必须大于0")
+	}
+
+	var assets model.UserAssets
+
+	return database.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("user_id = ?", userID).Set("gorm:query_option", "FOR UPDATE").First(&assets).Error; err != nil {
+			return errors.New("用户资产不存在")
+		}
+
+		if assets.UsdtBalance < amount {
+			return errors.New("USDT余额不足")
+		}
+
+		assets.UsdtBalance -= amount
+		assets.LastUpdateTime = time.Now().Unix()
+		assets.LastTradeTime = time.Now().Unix()
+
+		if err := tx.Save(&assets).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	// 注意：此函数修改后需要添加缓存失效逻辑
+	// s.InvalidateUserAssetsCache(userID)
+}

@@ -1,0 +1,488 @@
+package database
+
+import (
+	"fmt"
+	"strings"
+	"time"
+
+	"exchange-go/config"
+	"exchange-go/internal/pkg/logger"
+
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
+	"gorm.io/gorm/schema"
+)
+
+// MasterDB 主库连接（写操作）
+var MasterDB *gorm.DB
+
+// SlaveDBs 从库连接列表（读操作，轮询负载均衡）
+var SlaveDBs []*gorm.DB
+
+// DBConfig 数据库配置
+type DBConfig struct {
+	MasterConfig  *config.DatabaseConfig
+	SlaveConfigs  []*config.DatabaseConfig
+	MaxIdleConns  int
+	MaxOpenConns  int
+	MaxLifetime   time.Duration
+	SlowThreshold time.Duration
+}
+
+// ReadWriteSeparationConfig 读写分离配置
+type ReadWriteSeparationConfig struct {
+	Enabled       bool  `yaml:"enabled"`
+	MasterWeight  int   `yaml:"master_weight"`   // 主库读权重（用于读写不分离时的回退）
+	SlaveWeights  []int `yaml:"slave_weights"`   // 从库读权重
+	SlaveReadOnly bool  `yaml:"slave_read_only"` // 从库是否设置为只读
+}
+
+// 负载均衡相关
+var slaveIndex int
+var useMasterForRead bool
+
+// InitWithReadWriteSeparation 初始化读写分离数据库连接
+func InitWithReadWriteSeparation(cfg *DBConfig, rwCfg *ReadWriteSeparationConfig) error {
+	logger.Info("========================================")
+	logger.Info("初始化读写分离数据库连接...")
+	logger.Info("========================================")
+
+	// 初始化主库
+	masterDSN := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=%s&parseTime=True&loc=Local&timeout=10s&readTimeout=30s&writeTimeout=30s",
+		cfg.MasterConfig.User,
+		cfg.MasterConfig.Password,
+		cfg.MasterConfig.Host,
+		cfg.MasterConfig.Port,
+		cfg.MasterConfig.DBName,
+		cfg.MasterConfig.Charset,
+	)
+
+	masterDB, err := gorm.Open(mysql.Open(masterDSN), &gorm.Config{
+		Logger: logger.New(
+			&DBLogger{
+				slowThreshold: cfg.SlowThreshold,
+			},
+			logger.Config{
+				SlowThreshold:             cfg.SlowThreshold,
+				LogLevel:                  logger.Info,
+				IgnoreRecordNotFoundError: true,
+				Colorful:                  true,
+			},
+		),
+		NamingStrategy: schema.NamingStrategy{
+			TablePrefix:   "",
+			SingularTable: false,
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("主库连接失败: %w", err)
+	}
+
+	MasterDB = masterDB
+	logger.Infof("数据库主库连接成功: %s:%d", cfg.MasterConfig.Host, cfg.MasterConfig.Port)
+
+	// 配置主库连接池
+	sqlDB, err := MasterDB.DB()
+	if err != nil {
+		return fmt.Errorf("获取主库连接失败: %w", err)
+	}
+
+	sqlDB.SetMaxIdleConns(cfg.MaxIdleConns)
+	sqlDB.SetMaxOpenConns(cfg.MaxOpenConns)
+	sqlDB.SetConnMaxLifetime(cfg.MaxLifetime)
+
+	// 初始化从库
+	slaveCount := len(cfg.SlaveConfigs)
+	if rwCfg.Enabled && slaveCount > 0 {
+		logger.Info(fmt.Sprintf("配置了 %d 个从库", slaveCount))
+	} else {
+		logger.Warn("未配置从库或读写分离未启用，将使用主库进行读写操作")
+		useMasterForRead = true
+	}
+
+	for i, slaveConfig := range cfg.SlaveConfigs {
+		slaveDSN := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=%s&parseTime=True&loc=Local&timeout=10s&readTimeout=30s&writeTimeout=30s",
+			slaveConfig.User,
+			slaveConfig.Password,
+			slaveConfig.Host,
+			slaveConfig.Port,
+			slaveConfig.DBName,
+			slaveConfig.Charset,
+		)
+
+		slaveDB, err := gorm.Open(mysql.Open(slaveDSN), &gorm.Config{
+			Logger: logger.New(
+				&DBLogger{
+					slowThreshold: cfg.SlowThreshold,
+				},
+				logger.Config{
+					SlowThreshold:             cfg.SlowThreshold,
+					LogLevel:                  logger.Info,
+					IgnoreRecordNotFoundError: true,
+					Colorful:                  true,
+				},
+			),
+			NamingStrategy: schema.NamingStrategy{
+				TablePrefix:   "",
+				SingularTable: false,
+			},
+		})
+		if err != nil {
+			logger.Warn(fmt.Sprintf("从库%d连接失败: %v", i+1, err))
+			logger.Warn(fmt.Sprintf("从库%d配置: %s:%d", i+1, slaveConfig.Host, slaveConfig.Port))
+			continue
+		}
+
+		// 配置从库连接池（从库连接池可以稍小一些）
+		slaveSQLDB, err := slaveDB.DB()
+		if err != nil {
+			logger.Warn(fmt.Sprintf("获取从库%d连接失败: %v", i+1, err))
+			continue
+		}
+
+		slaveSQLDB.SetMaxIdleConns(cfg.MaxIdleConns / 2)
+		slaveSQLDB.SetMaxOpenConns(cfg.MaxOpenConns)
+		slaveSQLDB.SetConnMaxLifetime(cfg.MaxLifetime)
+
+		SlaveDBs = append(SlaveDBs, slaveDB)
+		logger.Infof("数据库从库%d连接成功: %s:%d", i+1, slaveConfig.Host, slaveConfig.Port)
+	}
+
+	// 如果没有从库，使用主库作为从库
+	if len(SlaveDBs) == 0 {
+		logger.Warn("未配置从库，将使用主库进行读操作")
+		SlaveDBs = append(SlaveDBs, MasterDB)
+		useMasterForRead = true
+	}
+
+	logger.Info("========================================")
+	logger.Info("数据库连接初始化完成")
+	logger.Info(fmt.Sprintf("主库: %s:%d", cfg.MasterConfig.Host, cfg.MasterConfig.Port))
+	logger.Info(fmt.Sprintf("从库数量: %d", len(SlaveDBs)))
+	logger.Info("========================================")
+
+	return nil
+}
+
+// GetDB 获取数据库连接
+// 根据SQL语句类型自动选择主库或从库
+func GetDB(sql string) *gorm.DB {
+	sql = strings.TrimSpace(strings.ToLower(sql))
+
+	// 判断是否为读操作
+	if isReadQuery(sql) {
+		return getSlaveDB()
+	}
+
+	// 写操作使用主库
+	return MasterDB
+}
+
+// isReadQuery 判断是否为读查询
+func isReadQuery(sql string) bool {
+	// 如果强制使用主库读，直接返回false
+	if useMasterForRead {
+		return false
+	}
+
+	readPrefixes := []string{
+		"select",
+		"show",
+		"describe",
+		"explain",
+		"desc",
+	}
+
+	for _, prefix := range readPrefixes {
+		if strings.HasPrefix(sql, prefix) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// getSlaveDB 获取从库连接（加权轮询策略）
+func getSlaveDB() *gorm.DB {
+	if len(SlaveDBs) == 0 {
+		return MasterDB
+	}
+
+	// 简单轮询策略（可以扩展为加权轮询）
+	slaveIndex = (slaveIndex + 1) % len(SlaveDBs)
+	return SlaveDBs[slaveIndex]
+}
+
+// GetMasterDB 获取主库连接（用于强制写操作）
+func GetMasterDB() *gorm.DB {
+	return MasterDB
+}
+
+// GetSlaveDBs 获取所有从库连接
+func GetSlaveDBs() []*gorm.DB {
+	return SlaveDBs
+}
+
+// GetAnySlaveDB 获取任意一个从库连接
+func GetAnySlaveDB() *gorm.DB {
+	if len(SlaveDBs) > 0 {
+		return SlaveDBs[0]
+	}
+	return MasterDB
+}
+
+// ReadFromSlave 从从库读取数据
+func ReadFromSlave(sql string, dest ...interface{}) error {
+	db := getSlaveDB()
+	return db.Raw(sql).Scan(dest...).Error
+}
+
+// WriteToMaster 写入主库
+func WriteToMaster(sql string, dest ...interface{}) error {
+	return MasterDB.Raw(sql).Scan(dest...).Error
+}
+
+// Transaction 事务操作（始终在主库上执行）
+func Transaction(fn func(tx *gorm.DB) error) error {
+	return MasterDB.Transaction(fn)
+}
+
+// DBLogger 数据库日志记录器
+type DBLogger struct {
+	slowThreshold time.Duration
+}
+
+// Print 实现gorm.Logger接口
+func (l *DBLogger) Print(values ...interface{}) {
+	if len(values) > 3 {
+		// 判断是否为慢查询
+		if duration, ok := values[3].(time.Duration); ok {
+			if duration > l.slowThreshold {
+				sql := values[3]
+				logger.Warn(fmt.Sprintf("慢查询检测: %s (耗时: %v)", sql, duration))
+			}
+		}
+
+		// 记录SQL日志（只记录非SELECT操作）
+		if sql, ok := values[3].(string); ok {
+			if !strings.HasPrefix(sql, "SELECT") && !strings.HasPrefix(sql, "select") {
+				logger.Debug(fmt.Sprintf("SQL执行: %s | 参数: %v", sql, values[4]))
+			}
+		}
+	}
+}
+
+// HealthCheck 数据库健康检查
+type DBHealthStatus struct {
+	MasterStatus  string                `json:"master_status"`
+	MasterLatency time.Duration         `json:"master_latency"`
+	SlaveCount    int                   `json:"slave_count"`
+	SlaveStatus   map[int]string        `json:"slave_status"`
+	SlaveLatency  map[int]time.Duration `json:"slave_latency"`
+	SlaveLag      map[int]int64         `json:"slave_lag"`
+}
+
+// HealthCheck 执行数据库健康检查
+func HealthCheck() (*DBHealthStatus, error) {
+	status := &DBHealthStatus{
+		SlaveStatus:  make(map[int]string),
+		SlaveLatency: make(map[int]time.Duration),
+		SlaveLag:     make(map[int]int64),
+	}
+
+	// 检查主库
+	start := time.Now()
+	var result int
+	err := MasterDB.Raw("SELECT 1").Scan(&result).Error
+	if err != nil {
+		status.MasterStatus = "unhealthy"
+		logger.Errorf("主库健康检查失败: %v", err)
+	} else {
+		status.MasterStatus = "healthy"
+	}
+	status.MasterLatency = time.Since(start)
+
+	// 检查从库
+	status.SlaveCount = len(SlaveDBs)
+	for i, slaveDB := range SlaveDBs {
+		start := time.Now()
+		var slaveResult int
+		err := slaveDB.Raw("SELECT 1").Scan(&slaveResult).Error
+		if err != nil {
+			status.SlaveStatus[i] = "unhealthy"
+			logger.Warn(fmt.Sprintf("从库%d健康检查失败: %v", i+1, err))
+		} else {
+			status.SlaveStatus[i] = "healthy"
+		}
+		status.SlaveLatency[i] = time.Since(start)
+
+		// 检查主从延迟
+		if status.SlaveStatus[i] == "healthy" {
+			var secondsBehindMaster int64
+			err := slaveDB.Raw("SHOW SLAVE STATUS").Scan(&secondsBehindMaster).Error
+			if err != nil {
+				// 从库可能不是复制配置，尝试其他方式
+				status.SlaveLag[i] = 0
+			} else {
+				status.SlaveLag[i] = secondsBehindMaster
+			}
+		}
+	}
+
+	logger.Infof("数据库健康检查完成: 主库=%s, 从库=%d", status.MasterStatus, status.SlaveCount)
+	return status, nil
+}
+
+// Close 关闭所有数据库连接
+func Close() error {
+	logger.Info("关闭数据库连接...")
+
+	if MasterDB != nil {
+		sqlDB, err := MasterDB.DB()
+		if err == nil {
+			sqlDB.Close()
+		}
+	}
+
+	for i, slaveDB := range SlaveDBs {
+		if slaveDB != nil {
+			sqlDB, err := slaveDB.DB()
+			if err == nil {
+				sqlDB.Close()
+			}
+			logger.Infof("从库%d连接已关闭", i+1)
+		}
+	}
+
+	logger.Info("数据库连接已全部关闭")
+	return nil
+}
+
+// AutoMigrate 自动迁移数据库表结构
+func AutoMigrate(dst ...interface{}) error {
+	return MasterDB.AutoMigrate(dst...)
+}
+
+// Raw 原生SQL查询（默认主库）
+func Raw(sql string, values ...interface{}) *gorm.DB {
+	return MasterDB.Raw(sql, values...)
+}
+
+// Table 指定表名
+func Table(name string) *gorm.DB {
+	return MasterDB.Table(name)
+}
+
+// Where 条件查询
+func Where(query interface{}, args ...interface{}) *gorm.DB {
+	return MasterDB.Where(query, args...)
+}
+
+// Order 排序
+func Order(expr interface{}) *gorm.DB {
+	return MasterDB.Order(expr)
+}
+
+// Limit 限制数量
+func Limit(n int) *gorm.DB {
+	return MasterDB.Limit(n)
+}
+
+// Offset 偏移量
+func Offset(n int) *gorm.DB {
+	return MasterDB.Offset(n)
+}
+
+// Create 创建记录
+func Create(value interface{}) *gorm.DB {
+	return MasterDB.Create(value)
+}
+
+// Save 保存记录
+func Save(value interface{}) *gorm.DB {
+	return MasterDB.Save(value)
+}
+
+// Updates 更新记录
+func Updates(values interface{}) *gorm.DB {
+	return MasterDB.Updates(values)
+}
+
+// Update 更新单个字段
+func Update(column string, value interface{}) *gorm.DB {
+	return MasterDB.Update(column, value)
+}
+
+// Delete 删除记录
+func Delete(value interface{}) *gorm.DB {
+	return MasterDB.Delete(value)
+}
+
+// Find 查询记录
+func Find(dest interface{}, conditions ...interface{}) *gorm.DB {
+	return MasterDB.Find(dest, conditions...)
+}
+
+// First 获取第一条记录
+func First(dest interface{}, conditions ...interface{}) *gorm.DB {
+	return MasterDB.First(dest, conditions...)
+}
+
+// Last 获取最后一条记录
+func Last(dest interface{}, conditions ...interface{}) *gorm.DB {
+	return MasterDB.Last(dest, conditions...)
+}
+
+// Count 统计数量
+func Count(count *int64) *gorm.DB {
+	return MasterDB.Count(count)
+}
+
+// Pluck 查询单个列
+func Pluck(column string, dest interface{}) *gorm.DB {
+	return MasterDB.Pluck(column, dest)
+}
+
+// Scan 扫描到结构体
+func Scan(dest interface{}) *gorm.DB {
+	return MasterDB.Scan(dest)
+}
+
+// Group 分组
+func Group(expr string) *gorm.DB {
+	return MasterDB.Group(expr)
+}
+
+// Having 分组条件
+func Having(query interface{}, args ...interface{}) *gorm.DB {
+	return MasterDB.Having(query, args...)
+}
+
+// Joins 连表查询
+func Joins(query string, args ...interface{}) *gorm.DB {
+	return MasterDB.Joins(query, args...)
+}
+
+// Preload 预加载关联
+func Preload(column string, condition ...interface{}) *gorm.DB {
+	return MasterDB.Preload(column, condition...)
+}
+
+// TransactionWithReadWrite 事务中读写分离
+// 注意：事务中所有操作都在主库上执行
+func TransactionWithReadWrite(fn func(tx *gorm.DB) error) error {
+	return MasterDB.Transaction(fn)
+}
+
+// SetForceMasterForRead 强制使用主库进行读操作
+// 用于需要强一致性的场景
+func SetForceMasterForRead(force bool) {
+	useMasterForRead = force
+	logger.Infof("强制使用主库读操作: %v", force)
+}
+
+// IsReadFromSlave 检查当前是否从从库读取
+func IsReadFromSlave() bool {
+	return !useMasterForRead && len(SlaveDBs) > 0
+}

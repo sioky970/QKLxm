@@ -1,0 +1,238 @@
+# MySQL 8.0 优化配置文件
+# 基于交易所业务场景的内存和性能优化
+# 使用方法：替换MySQL配置文件my.cnf或my.ini，重启MySQL服务
+
+[mysqld]
+# ============================================================
+# 基础配置
+# ============================================================
+server-id = 1
+port = 3306
+datadir = /var/lib/mysql
+socket = /var/lib/mysql/mysql.sock
+pid-file = /var/run/mysqld/mysqld.pid
+
+# 字符集配置
+character-set-server = utf8mb4
+collation-server = utf8mb4_unicode_ci
+init_connect = 'SET NAMES utf8mb4'
+
+# 跳过主机名解析（加速连接）
+skip-name-resolve
+
+# ============================================================
+# InnoDB 缓冲池配置（核心内存优化）
+# ============================================================
+
+# 建议设置为物理内存的70%-80%，如16GB内存则设置为12G
+innodb_buffer_pool_size = 12G
+
+# 缓冲池实例数量，提高并发性能（建议CPU核心数的75%）
+innodb_buffer_pool_instances = 8
+
+# 缓冲池刷新方式，平衡性能和数据安全
+innodb_flush_log_at_trx_commit = 2
+
+# 日志文件大小，较大的值减少磁盘I/O
+innodb_log_file_size = 1G
+
+# 日志缓冲区大小
+innodb_log_buffer_size = 64M
+
+# 刷新邻接页，减少后台刷新对前台查询的影响
+innodb_flush_neighbors = 0
+
+# 独立表空间，减少锁竞争
+innodb_file_per_table = ON
+
+# 最大的并发线程数
+innodb_thread_concurrency = 64
+
+# 读写线程数
+innodb_read_io_threads = 16
+innodb_write_io_threads = 16
+
+# I/O容量限制
+innodb_io_capacity = 2000
+innodb_io_capacity_max = 4000
+
+# ============================================================
+# 连接配置
+# ============================================================
+
+# 最大连接数，根据业务并发需求调整
+max_connections = 500
+
+# 空闲连接超时时间（秒）
+wait_timeout = 300
+
+# 交互式连接超时时间（秒）
+interactive_timeout = 300
+
+# 线程缓存大小
+thread_cache_size = 64
+
+# 每个连接的最大包大小
+max_allowed_packet = 256M
+
+# ============================================================
+# 查询缓存配置（MySQL 8.0已移除，此处为参考）
+# MySQL 8.0移除了查询缓存，建议使用应用层缓存
+# ============================================================
+
+# ============================================================
+# 临时表和排序缓冲区配置
+# ============================================================
+
+# 临时表最大大小
+tmp_table_size = 256M
+
+# 最大排序缓冲区
+max_sort_length = 1M
+
+# 排序缓冲区大小
+sort_buffer_size = 4M
+
+# 联合操作缓冲区
+join_buffer_size = 4M
+
+# 读取缓冲区
+read_buffer_size = 2M
+
+# 随机读取缓冲区
+read_rnd_buffer_size = 8M
+
+# ============================================================
+-- 索引缓冲区
+-- key_buffer_size 只对MyISAM有效，InnoDB使用缓冲池
+
+-- ============================================================
+# 慢查询日志配置
+# ============================================================
+
+# 慢查询日志开关
+slow_query_log = ON
+
+# 慢查询日志文件路径
+slow_query_log_file = /var/log/mysql/slow.log
+
+# 慢查询阈值（秒），超过此时间的查询记录到慢查询日志
+long_query_time = 1
+
+# 记录没有使用索引的查询
+log_queries_not_using_indexes = ON
+
+# 记录管理语句
+log_slow_admin_statements = ON
+
+# ============================================================
+# 错误日志配置
+# ============================================================
+
+log_error = /var/log/mysql/error.log
+
+# 记录警告信息
+log_error_verbosity = 3
+
+# ============================================================
+# 二进制日志配置（用于主从复制和数据恢复）
+# ============================================================
+
+# 开启二进制日志
+log_bin = /var/log/mysql/mysql-bin
+binlog_format = ROW
+binlog_row_image = FULL
+
+# 二进制日志过期时间（天）
+expire_logs_days = 7
+
+# 最大二进制日志大小
+max_binlog_size = 1G
+
+# 同步写入磁盘
+sync_binlog = 1
+
+# ============================================================
+# 表定义缓存配置
+# ============================================================
+
+# 表定义缓存
+table_definition_cache = 2000
+
+# 打开表缓存
+table_open_cache = 4000
+
+# 缓存实例数
+table_open_cache_instances = 16
+
+# ============================================================
+# 性能模式配置
+# ============================================================
+
+performance_schema = ON
+
+# 内存分配
+performance_schema_instrument = '%=ON'
+
+# ============================================================
+# 字符集和排序配置
+# ============================================================
+
+# 校验字符集
+character-set-client-handshake = FALSE
+skip-character-set-client-handshake
+
+# 默认排序规则
+collation_server = utf8mb4_unicode_ci
+
+# ============================================================
+# 其他性能优化配置
+# ============================================================
+
+# 禁用查询缓存（MySQL 8.0已移除）
+# query_cache_type = 0
+
+# 自动增量锁定模式
+auto_increment_increment = 1
+auto_increment_offset = 1
+
+# 禁用元数据锁定监控
+metadata_locks_hash_instances = 512
+
+# 线程池配置（企业版功能，社区版忽略）
+# thread_handling = pool-of-threads
+
+# ============================================================
+# 安全配置
+# ============================================================
+
+# 禁止远程root登录
+skip-grant-tables = OFF
+
+# 禁止使用LOAD DATA LOCAL
+local-infile = OFF
+
+# ============================================================
+# 特定于交易系统的优化
+# ============================================================
+
+# 减少死锁检测开销（高并发场景）
+innodb_deadlock_detect = OFF
+
+# 使用乐观锁策略（应用层控制）
+innodb_lock_wait_timeout = 50
+
+# 大事务优化
+innodb_flush_log_at_trx_commit = 2  # 平衡安全性和性能
+
+# 批量插入优化
+bulk_insert_buffer_size = 64M
+
+# ============================================================
+# Windows 平台特定配置（如果使用Windows）
+# ============================================================
+
+# [Windows]
+# basedir = "C:/Program Files/MySQL/MySQL Server 8.0"
+# datadir = "C:/ProgramData/MySQL/MySQL Server 8.0/Data"
+# tmpdir = "C:/ProgramData/MySQL/MySQL Server 8.0/Temp"

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="flash-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFD700;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#FFA500;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <circle cx="32" cy="32" r="30" fill="url(#flash-grad)"/>
+  <path fill="#FFF" d="M38 14L22 32h10l-6 18 16-18H32l6-18z"/>
+  <path fill="#FFF" opacity="0.3" d="M40 28c2 2 2 6 0 8s-6 2-8 0"/>
+</svg>
